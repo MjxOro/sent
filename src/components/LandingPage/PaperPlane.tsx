@@ -63,9 +63,10 @@ export default function Model({ ref, ...props }: ModelProps) {
     }
   });
 
-  const { nodes, materials } = useGLTF("/three/PaperAirplane.glb") as
-    | GLTFResult
-    | any;
+  // @ts-ignore
+  const { nodes, materials } = useGLTF(
+    "/three/PaperAirplane.glb",
+  ) as GLTFResult;
 
   return (
     <group ref={paperPlaneRef} {...props} dispose={null}>
