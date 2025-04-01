@@ -1,9 +1,11 @@
-import { ReactNode } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+"use client";
+import { ReactNode } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 // import { useStore } from '../../../utils/store';
+import { useExitStore } from "@/providers/store-provider";
 
 const ExitAnimation = ({ children }: { children: ReactNode }) => {
-  // const { exitThree } = useStore();
+  const { exitThree } = useExitStore((state) => state);
   return (
     <AnimatePresence>
       {!exitThree && (
