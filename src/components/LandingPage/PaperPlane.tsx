@@ -21,7 +21,7 @@ type ModelProps = {
   ref?: React.Ref<THREE.Group>;
 } & JSX.IntrinsicElements["group"];
 
-export default function Model({ ref, ...props }: ModelProps) {
+export default function Model({ ...props }: ModelProps) {
   const paperPlaneRef = useRef<THREE.Group>(null);
 
   // Create motion values for both rotation and position
