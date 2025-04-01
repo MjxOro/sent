@@ -1,11 +1,11 @@
+"use client";
 // components/Background.tsx
-import { useRef, useEffect } from 'react';
-import { useThree, useFrame } from '@react-three/fiber';
-// import useStore from '../../utils/store';
-import '@/components/customShaders/NoiseShader';
-import { NoiseMaterialType } from '@/components/customShaders/NoiseShader';
-import { useMotionValue, useSpring } from 'motion/react';
-import * as THREE from 'three';
+import { useRef } from "react";
+import { useThree, useFrame } from "@react-three/fiber";
+import "@/components/customShaders/NoiseShader";
+import { NoiseMaterialType } from "@/components/customShaders/NoiseShader";
+import { useMotionValue, useSpring } from "motion/react";
+import * as THREE from "three";
 
 const Background = () => {
   const material = useRef<NoiseMaterialType>(null);
@@ -20,41 +20,29 @@ const Background = () => {
   const springRotationX = useSpring(rotationX, {
     stiffness: 100,
     damping: 80,
-    mass: 1
+    mass: 1,
   });
 
   const springAnimationSpeed = useSpring(animationSpeed, {
     stiffness: 60,
     damping: 50,
-    mass: 1
+    mass: 1,
   });
 
-  // Effect to toggle the rotation value for subtle movement
-  useEffect(() => {
-    let interval: NodeJS.Timeout;
-
-    const animateBackground = () => {
-      // Get current value to determine direction
-      const currentRotation = rotationX.get();
-
-      // Alternate between two slightly different rotation values
-      if (currentRotation <= (-4 * Math.PI) / 9) {
-        rotationX.set((-4 * Math.PI) / 9 + 0.05);
-        animationSpeed.set(2.5);
-      } else {
-        rotationX.set((-4 * Math.PI) / 9);
-        animationSpeed.set(2);
-      }
-    };
-
-    // Create a slow animation loop
-    interval = setInterval(animateBackground, 5000);
-
-    return () => clearInterval(interval);
-  }, [rotationX, animationSpeed]);
-
   // Update shader time and apply spring values
-  useFrame((_, delta) => {
+  useFrame((state, delta) => {
+    const time = state.clock.getElapsedTime();
+
+    // Smoothly oscillate rotation and animation speed using sine waves
+    // Use a very slow frequency for subtle, gradual changes
+    const rotationOffset = Math.sin(time * 1) * 0.025; // Small oscillation with period of a few seconds
+    const speedFactor = 0.25 + Math.sin(time * 0.13) * 0.35; // Oscillates between 0 and 0.5, offset by 0.35
+
+    // Set the motion values
+    rotationX.set((-4 * Math.PI) / 9 + rotationOffset);
+    animationSpeed.set(2 + speedFactor);
+
+    // Apply the spring values
     if (material.current) {
       material.current.uTime += delta * springAnimationSpeed.get();
     }
