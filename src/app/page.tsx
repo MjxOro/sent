@@ -1,5 +1,4 @@
 "use client";
-import Image from "next/image";
 import { ExitStoreProvider } from "@/providers/store-provider";
 import dynamic from "next/dynamic";
 // Dynamic imports for better code splitting
