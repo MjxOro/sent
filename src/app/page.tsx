@@ -9,12 +9,13 @@ const LandingPageCanvas = dynamic(
     ssr: false,
   },
 );
-import CanvasWrapper from "@/components/CanvasWrapper";
+import LandingDOM from "@/components/LandingPage/LandingPageDOM";
 
 export default function Home() {
   return (
     <ExitStoreProvider>
       <LandingPageCanvas />
+      <LandingDOM />
     </ExitStoreProvider>
   );
 }
