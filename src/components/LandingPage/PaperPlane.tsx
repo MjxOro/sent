@@ -63,7 +63,7 @@ export default function Model({ ...props }: ModelProps) {
     }
   });
 
-  // @ts-ignore
+  // @ts-expect-error - Missing type definitions for useGLTF return value
   const { nodes, materials } = useGLTF(
     "/three/PaperAirplane.glb",
   ) as GLTFResult;
