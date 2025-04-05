@@ -12,7 +12,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/yourusername/your-repo-name/server/internal/config"
+	"github.com/mjxoro/sent/server/internal/config"
 	"golang.org/x/oauth2"
 )
 
@@ -56,7 +56,7 @@ func (s *OAuthService) GenerateStateOauthCookie(w http.ResponseWriter) string {
 	b := make([]byte, 16)
 	rand.Read(b)
 	state := base64.URLEncoding.EncodeToString(b)
-	
+
 	// Create cookie
 	expiration := time.Now().Add(365 * 24 * time.Hour)
 	cookie := http.Cookie{
