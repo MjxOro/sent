@@ -21,9 +21,9 @@
 │ ├── db/ # Database operations
 │ │ ├── postgres/ # PostgreSQL
 │ │ │ ├── connection.go
-│ │ │ ├── user_repo.go
-│ │ │ ├── message_repo.go
-│ │ │ └── room_repo.go
+│ │ │ ├── user.go
+│ │ │ ├── message.go
+│ │ │ └── room.go
 │ │ └── redis/ # Redis
 │ │ ├── connection.go
 │ │ ├── cache.go
