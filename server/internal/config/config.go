@@ -52,6 +52,20 @@ func Load() *Config {
 		Server: ServerConfig{
 			Port: getEnv("PORT", "8080"),
 		},
+		Database: DatabaseConfig{
+			Host:     getEnv("POSTGRES_HOST", "localhost"),
+			Port:     getEnv("POSTGRES_PORT", "5432"),
+			User:     getEnv("POSTGRES_USER", "postgres"),
+			Password: getEnv("POSTGRES_PASSWORD", "postgres"),
+			DBName:   getEnv("POSTGRES_DB", "chatapp"),
+			SSLMode:  getEnv("POSTGRES_SSLMODE", "disable"),
+		},
+		Redis: RedisConfig{
+			Host:     getEnv("REDIS_HOST", "localhost"),
+			Port:     getEnv("REDIS_PORT", "6379"),
+			Password: getEnv("REDIS_PASSWORD", ""),
+			DB:       0,
+		},
 		OAuth: OAuthConfig{
 			ProviderName: getEnv("OAUTH_PROVIDER_NAME", "google"),
 			ClientID:     getEnv("OAUTH_CLIENT_ID", ""),
@@ -62,7 +76,6 @@ func Load() *Config {
 			UserInfoURL:  getEnv("OAUTH_USERINFO_URL", "https://www.googleapis.com/oauth2/v3/userinfo"),
 			Scopes:       []string{"profile", "email"},
 		},
-		// Add Database and Redis configs as needed
 	}
 }
 
