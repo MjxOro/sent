@@ -1,11 +1,27 @@
 FROM golang:latest
+
 WORKDIR /server
+
+ENV GO111MODULE=on
+ENV GOPROXY=direct
+
+RUN go install github.com/air-verse/air@latest
+# Copy and download dependencies
 COPY go.mod go.sum ./
 RUN go mod download
+
+
+# Copy Air configuration
+COPY .air.toml .air.toml
+
+# Copy source code
 COPY . .
+
 # Expose port
 EXPOSE 8080
+
 # Set environment variable for binding address
 ENV GIN_HOST=0.0.0.0
-# Build and run the application
-CMD ["sh", "-c", "go run -ldflags \"-X main.serverHost=0.0.0.0\" ./cmd/api/main.go"]
+
+# Run Air for hot reloading
+CMD ["air", "-c", ".air.toml"]
