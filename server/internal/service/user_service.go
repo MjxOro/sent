@@ -2,10 +2,9 @@
 package service
 
 import (
-	"time"
-
 	"github.com/mjxoro/sent/server/internal/db/postgres"
 	"github.com/mjxoro/sent/server/internal/models"
+	"time"
 )
 
 // UserService handles user-related business logic
@@ -38,9 +37,8 @@ func (s *UserService) FindOrCreateFromOAuth(userInput *model.User, provider stri
 		// User exists, return it
 		return user, nil
 	}
-
 	// User not found, try to find by email
-	user, err = s.pgUser.FindByEmail(user.Email)
+	user, err = s.pgUser.FindByEmail(userInput.Email)
 	if err == nil {
 		// User exists with this email but different OAuth provider
 		// Update the OAuth ID if it's from the same provider
@@ -52,7 +50,6 @@ func (s *UserService) FindOrCreateFromOAuth(userInput *model.User, provider stri
 		}
 		return user, nil
 	}
-
 	// User not found, create new one
 	user = &model.User{
 		Email:     userInput.Email,
@@ -63,10 +60,8 @@ func (s *UserService) FindOrCreateFromOAuth(userInput *model.User, provider stri
 		CreatedAt: time.Now(),
 		UpdatedAt: time.Now(),
 	}
-
 	if err := s.pgUser.Create(user); err != nil {
 		return nil, err
 	}
-
 	return user, nil
 }

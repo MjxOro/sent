@@ -2,27 +2,30 @@
 package handler
 
 import (
-	"net/http"
-
+	"fmt"
 	"github.com/gin-gonic/gin"
 	"github.com/mjxoro/sent/server/internal/auth"
 	"github.com/mjxoro/sent/server/internal/models"
 	"github.com/mjxoro/sent/server/internal/service"
+	"net/http"
+	"os"
 )
 
 // AuthHandler handles authentication requests
 type AuthHandler struct {
-	oauthService *auth.OAuthService
-	jwtService   *auth.JWTService
-	userService  *service.UserService
+	oauthService        *auth.OAuthService
+	jwtService          *auth.JWTService
+	userService         *service.UserService
+	refreshTokenService *service.RefreshTokenService
 }
 
 // NewAuthHandler creates a new auth handler
-func NewAuthHandler(oauthService *auth.OAuthService, jwtService *auth.JWTService, userService *service.UserService) *AuthHandler {
+func NewAuthHandler(oauthService *auth.OAuthService, jwtService *auth.JWTService, userService *service.UserService, refreshTokenService *service.RefreshTokenService) *AuthHandler {
 	return &AuthHandler{
-		oauthService: oauthService,
-		jwtService:   jwtService,
-		userService:  userService,
+		oauthService:        oauthService,
+		jwtService:          jwtService,
+		userService:         userService,
+		refreshTokenService: refreshTokenService,
 	}
 }
 
@@ -100,12 +103,96 @@ func (h *AuthHandler) Callback(c *gin.Context) {
 		return
 	}
 
-	// Return the token or redirect to frontend with token
-	// For API usage:
-	c.JSON(http.StatusOK, gin.H{
-		"token": jwtToken,
-	})
+	// Generate refresh token
+	refreshToken, err := h.jwtService.GenerateRefreshToken(user.ID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "failed to generate refresh token",
+		})
+		return
+	}
 
-	// For webapp redirect (uncomment this and comment the JSON response above)
-	// c.Redirect(http.StatusTemporaryRedirect, fmt.Sprintf("http://your-frontend-url/?token=%s", jwtToken))
+	// Store refresh token in database
+	refreshExpiry := h.jwtService.GetRefreshTokenExpiry()
+	err = h.refreshTokenService.Store(user.ID, refreshToken, refreshExpiry)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "failed to store refresh token",
+		})
+		return
+	}
+
+	// Set access token cookie
+	c.SetCookie(
+		"auth_token", // name
+		jwtToken,     // value
+		3600*24,      // max age (24 hours)
+		"/",          // path
+		"",           // domain
+		true,         // secure
+		true,         // HTTP only
+	)
+
+	// Set refresh token cookie
+	c.SetCookie(
+		"refresh_token", // name
+		refreshToken,    // value
+		3600*24*30,      // max age (30 days)
+		"/",             // path
+		"",              // domain
+		true,            // secure
+		true,            // HTTP only
+	)
+
+	// Redirect to frontend
+	redirectURI := os.Getenv("FRONTEND_URI")
+	if redirectURI == "" {
+		redirectURI = "http://localhost:3000/"
+	}
+	c.Redirect(http.StatusFound, fmt.Sprintf("%s/", redirectURI))
+}
+
+// RefreshToken handles refreshing an expired access token
+func (h *AuthHandler) RefreshToken(c *gin.Context) {
+	// Struct to bind JSON body
+	var req struct {
+		RefreshToken string `json:"refreshToken" binding:"required"`
+	}
+
+	// Bind the JSON body to the struct
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "refresh_token is required in the request body"})
+		return
+	}
+
+	fmt.Println(req.RefreshToken)
+	// Validate refresh token
+	claims, err := h.jwtService.ValidateToken(req.RefreshToken)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid refresh token"})
+		return
+	}
+
+	// Check if refresh token exists in database and is valid
+	isValid, err := h.refreshTokenService.Validate(claims.UserID, req.RefreshToken)
+	if err != nil || !isValid {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "refresh token not valid"})
+		return
+	}
+
+	// Get user information
+	user, err := h.userService.GetByID(claims.UserID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to get user"})
+		return
+	}
+
+	// Generate new access token
+	newAccessToken, err := h.jwtService.GenerateToken(user.ID, user.Email, user.Name)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to generate token"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "token refreshed successfully", "auth_token": newAccessToken})
 }

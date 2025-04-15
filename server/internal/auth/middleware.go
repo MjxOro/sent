@@ -11,24 +11,32 @@ import (
 // AuthMiddleware creates middleware for JWT authentication
 func AuthMiddleware(jwtService *JWTService) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		// Get the Authorization header
+		var tokenString string
+
+		// First check Authorization header
 		authHeader := c.GetHeader("Authorization")
-		if authHeader == "" {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "authorization header required"})
+		if authHeader != "" {
+			// Check if the header has the Bearer prefix
+			headerParts := strings.Split(authHeader, " ")
+			if len(headerParts) == 2 && headerParts[0] == "Bearer" {
+				tokenString = headerParts[1]
+			}
+		}
+
+		// If no token in header, check cookie
+		if tokenString == "" {
+			cookie, err := c.Cookie("auth_token")
+			if err == nil {
+				tokenString = cookie
+			}
+		}
+
+		// If still no token, return unauthorized
+		if tokenString == "" {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "authentication required"})
 			c.Abort()
 			return
 		}
-
-		// Check if the header has the Bearer prefix
-		headerParts := strings.Split(authHeader, " ")
-		if len(headerParts) != 2 || headerParts[0] != "Bearer" {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid authorization format"})
-			c.Abort()
-			return
-		}
-
-		// Extract the token
-		tokenString := headerParts[1]
 
 		// Validate the token
 		claims, err := jwtService.ValidateToken(tokenString)
@@ -42,7 +50,6 @@ func AuthMiddleware(jwtService *JWTService) gin.HandlerFunc {
 		c.Set("userID", claims.UserID)
 		c.Set("email", claims.Email)
 		c.Set("name", claims.Name)
-
 		c.Next()
 	}
 }

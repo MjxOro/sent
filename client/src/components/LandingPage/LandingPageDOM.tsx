@@ -6,6 +6,7 @@ import GoogleIcon from "@/components/GoogleIcon";
 const LandingDOM: React.FC = () => {
   const handleGoogleAuth = (e: React.MouseEvent<HTMLButtonElement>) => {
     e.preventDefault();
+    window.location.href = `${process.env.NEXT_PUBLIC_SERVERURI}/api/auth/login`;
   };
   return (
     <div className="absolute inset-0 flex flex-col items-center z-10">

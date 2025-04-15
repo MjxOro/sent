@@ -46,10 +46,12 @@ func main() {
 	pgUser := postgres.NewUser(pgDB)
 	pgRoom := postgres.NewRoom(pgDB)
 	pgMessage := postgres.NewMessage(pgDB)
+	pgRefreshToken := postgres.NewRefreshToken(pgDB)
 
 	// Initialize services
 	userService := service.NewUserService(pgUser)
 	chatService := service.NewChatService(pgRoom, pgMessage, redisClient)
+	refreshTokenService := service.NewRefreshTokenService(pgRefreshToken)
 
 	// Initialize auth services
 	oauthService := auth.NewOAuthService(cfg)
@@ -60,7 +62,7 @@ func main() {
 	go hub.Run()
 
 	// Initialize handlers
-	authHandler := handler.NewAuthHandler(oauthService, jwtService, userService)
+	authHandler := handler.NewAuthHandler(oauthService, jwtService, userService, refreshTokenService)
 	wsHandler := handler.NewWSHandler(hub, chatService, userService)
 
 	// Set Gin mode
@@ -96,6 +98,7 @@ func main() {
 		{
 			authRoutes.GET("/login", authHandler.Login)
 			authRoutes.GET("/callback", authHandler.Callback)
+			authRoutes.POST("/refresh_token", authHandler.RefreshToken)
 		}
 
 		// Protected routes
