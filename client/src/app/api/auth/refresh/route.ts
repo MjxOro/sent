@@ -18,14 +18,16 @@ export async function POST(request: NextRequest) {
 
     // Send the refresh token to your backend
     // Replace with your actual backend refresh endpoint
-    // const response = await fetch(`${process.env.BACKEND_URL}/auth/refresh`, {
-    const response = await fetch(`http://backend:8080/api/auth/refresh_token`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
+    const response = await fetch(
+      `${process.env.SERVERURI}/api/auth/refresh_token`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ refreshToken }),
       },
-      body: JSON.stringify({ refreshToken }),
-    });
+    );
 
     // If the backend responds with an error (refresh token invalid or expired)
     if (!response.ok) {
