@@ -18,9 +18,9 @@ type JWTService struct {
 
 // TokenClaims represents the claims in the JWT
 type TokenClaims struct {
-	UserID    string `json:"user_id"`
-	Email     string `json:"email"`
-	Name      string `json:"name"`
+	UserID string `json:"user_id"`
+	Email  string `json:"email"`
+	Name   string `json:"name"`
 	jwt.RegisteredClaims
 }
 
@@ -87,4 +87,31 @@ func (s *JWTService) ValidateToken(tokenString string) (*TokenClaims, error) {
 	}
 
 	return nil, errors.New("invalid token")
+}
+
+// GenerateRefreshToken creates a longer-lasting refresh token
+func (s *JWTService) GenerateRefreshToken(userID string) (string, error) {
+	// Set refresh token duration (30 days)
+	refreshDuration := 30 * 24 * time.Hour
+
+	// Create the claims
+	claims := TokenClaims{
+		UserID: userID,
+		RegisteredClaims: jwt.RegisteredClaims{
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(refreshDuration)),
+			IssuedAt:  jwt.NewNumericDate(time.Now()),
+			NotBefore: jwt.NewNumericDate(time.Now()),
+		},
+	}
+
+	// Create token with claims
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+
+	// Generate encoded token
+	return token.SignedString([]byte(s.secretKey))
+}
+
+// GetRefreshTokenExpiry returns the expiry time for refresh tokens
+func (s *JWTService) GetRefreshTokenExpiry() time.Time {
+	return time.Now().Add(30 * 24 * time.Hour)
 }
