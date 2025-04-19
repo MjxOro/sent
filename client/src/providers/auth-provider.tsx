@@ -10,14 +10,14 @@ import {
 import { useAuthStore, User } from "@/stores/authStore";
 
 // Create a context for authentication with proper types
-interface AuthContextType {
+export type AuthContextType = {
   isAuthenticated: boolean;
   isLoading: boolean;
   user: User | null;
   error: string | null;
   logout: () => Promise<void>;
   checkAuth: () => Promise<boolean>;
-}
+};
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 

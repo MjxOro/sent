@@ -11,6 +11,7 @@ import {
   useDashboardStore,
   Thread,
   ThreadGroup,
+  Message,
 } from "@/stores/dashboardStore";
 
 // Create a context for dashboard with proper types
@@ -27,6 +28,17 @@ export type DashboardContextType = {
   setSearchQuery: (query: string) => void;
   toggleThemeMode: () => void;
   createNewThread: (title: string) => string;
+
+  // New WebSocket properties
+  wsStatus: "connected" | "disconnected" | "connecting" | "error" | "idle";
+  messages: Message[];
+  isLoadingMessages: boolean;
+  messagesError: string | null;
+
+  // New WebSocket methods
+  sendMessage: (content: string) => void;
+  sendTypingIndicator: (isTyping: boolean) => void;
+  loadMoreMessages: () => Promise<void>;
 };
 
 const DashboardContext = createContext<DashboardContextType | undefined>(
@@ -36,11 +48,14 @@ const DashboardContext = createContext<DashboardContextType | undefined>(
 // Provider component
 export function DashboardProvider({ children }: { children: ReactNode }) {
   const {
+    // UI state
     sidebarOpen,
     threads,
     currentThreadId,
     searchQuery,
     themeMode,
+
+    // UI actions
     toggleSidebar,
     setCurrentThread,
     pinThread,
@@ -48,6 +63,19 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
     setSearchQuery,
     toggleThemeMode,
     createNewThread,
+
+    // WebSocket & Messages state
+    wsConnection,
+    messages,
+    isLoadingMessages,
+    messagesError,
+
+    // WebSocket & Messages actions
+    connectWebSocket,
+    disconnectWebSocket,
+    sendMessage,
+    sendTypingIndicator,
+    loadMoreMessages,
   } = useDashboardStore();
 
   const [isInitialized, setIsInitialized] = useState(false);
@@ -67,6 +95,30 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
     }
   }, [themeMode]);
 
+  // Auto-reconnect WebSocket on network connectivity changes
+  useEffect(() => {
+    if (typeof window === "undefined" || !isInitialized) return;
+
+    const handleOnline = () => {
+      if (currentThreadId) {
+        connectWebSocket(currentThreadId);
+      }
+    };
+
+    window.addEventListener("online", handleOnline);
+
+    return () => {
+      window.removeEventListener("online", handleOnline);
+    };
+  }, [isInitialized, currentThreadId, connectWebSocket]);
+
+  // Clean up WebSocket on unmount
+  useEffect(() => {
+    return () => {
+      disconnectWebSocket();
+    };
+  }, [disconnectWebSocket]);
+
   // Create the context value
   const contextValue: DashboardContextType = {
     sidebarOpen,
@@ -81,6 +133,17 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
     setSearchQuery,
     toggleThemeMode,
     createNewThread,
+
+    // WebSocket properties
+    wsStatus: wsConnection.status,
+    messages,
+    isLoadingMessages,
+    messagesError,
+
+    // WebSocket methods
+    sendMessage,
+    sendTypingIndicator,
+    loadMoreMessages,
   };
 
   return (

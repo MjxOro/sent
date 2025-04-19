@@ -85,9 +85,9 @@ const Dashboard = () => {
     setMessage("");
   };
 
-  // Handle receiving a new message
-  const handleSendMessage = (messageText: string) => {
-    // Add user message
+  // Send message to API & handle response
+  const handleSendMessage = async (messageText: string) => {
+    // Add user message to UI
     const userMessage: Message = {
       id: `user-${Date.now()}`,
       role: "user",
@@ -96,21 +96,40 @@ const Dashboard = () => {
     };
 
     setMessages((prev) => [...prev, userMessage]);
-
-    // Simulate assistant response
     setIsLoading(true);
 
-    setTimeout(() => {
-      const assistantMessage: Message = {
-        id: `assistant-${Date.now()}`,
-        role: "assistant",
-        content: `Meow! Cat has received your message: "${messageText}" nya~`,
-        timestamp: new Date(),
-      };
+    try {
+      // Send message to API if we have a thread ID
+      if (currentThreadId) {
+        const response = await fetch(`/api/chat/${currentThreadId}`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ content: messageText }),
+        });
 
-      setMessages((prev) => [...prev, assistantMessage]);
+        if (!response.ok) {
+          throw new Error("Failed to send message");
+        }
+      }
+
+      // For demo: simulate a response
+      setTimeout(() => {
+        const assistantMessage: Message = {
+          id: `assistant-${Date.now()}`,
+          role: "assistant",
+          content: `Meow! Cat has received your message: "${messageText}" nya~`,
+          timestamp: new Date(),
+        };
+
+        setMessages((prev) => [...prev, assistantMessage]);
+        setIsLoading(false);
+      }, 1000);
+    } catch (error) {
+      console.error("Error sending message:", error);
       setIsLoading(false);
-    }, 1000);
+    }
   };
 
   // Handle thread selection
@@ -161,7 +180,8 @@ const Dashboard = () => {
             <Link
               href="/chat"
               className="flex items-center justify-center w-full py-2 px-4 bg-pink-600 hover:bg-pink-700 text-white rounded-lg"
-              onClick={() => {
+              onClick={(e) => {
+                e.preventDefault();
                 const id = createNewThread("New Chat");
                 router.push(`/chat/${id}`);
               }}
