@@ -14,6 +14,7 @@ const LandingPageCanvas = dynamic(
 
 import LandingPageDOM from "@/components/LandingPage/LandingPageDOM";
 import Dashboard from "@/components/Dashboard";
+import { DashboardProvider } from "@/providers/dashboard-provider";
 
 // Loading component to reuse
 const LoadingSpinner = () => (
@@ -58,7 +59,9 @@ export default function LandingContent() {
   // Render different components based on authentication state
   return isAuthenticated ? (
     // Authenticated UI - Show Dashboard
-    <Dashboard />
+    <DashboardProvider>
+      <Dashboard />
+    </DashboardProvider>
   ) : (
     // Unauthenticated UI - Show Landing Page with sign-in
     <>
