@@ -58,12 +58,8 @@ export default function LandingContent() {
 
   // Render different components based on authentication state
   return isAuthenticated ? (
-    // Authenticated UI - Show Dashboard
-    <DashboardProvider>
-      <Dashboard />
-    </DashboardProvider>
+    <Dashboard />
   ) : (
-    // Unauthenticated UI - Show Landing Page with sign-in
     <>
       <LandingPageCanvas />
       <LandingPageDOM />
