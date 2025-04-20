@@ -184,8 +184,8 @@ func main() {
 				c.JSON(200, messages)
 			})
 
-			// WebSocket route
-			protected.GET("/ws/room/:roomId", wsHandler.HandleConnection)
+			// WebSocket endpoint - Single connection for all rooms
+			protected.GET("/ws", wsHandler.HandleConnection)
 		}
 	}
 
