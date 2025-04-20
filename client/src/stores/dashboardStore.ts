@@ -1,6 +1,7 @@
-// stores/dashboardStore.ts
+"use client";
+
 import { create } from "zustand";
-import { persist } from "zustand/middleware";
+import { createJSONStorage, persist } from "zustand/middleware";
 
 // Define Message type
 export interface Message {
@@ -41,6 +42,14 @@ type ConnectionStatus =
   | "error"
   | "idle";
 
+// Standardized WebSocket message format
+interface WSMessage {
+  type: string;
+  room_id: string;
+  content?: string;
+  data?: any;
+}
+
 // Define Dashboard state and actions
 export interface DashboardState {
   sidebarOpen: boolean;
@@ -55,8 +64,13 @@ export interface DashboardState {
   messages: Message[];
   isLoadingMessages: boolean;
   messagesError: string | null;
+  activeRooms: Set<string>; // Track which rooms we're subscribed to
+  typingUsers: Record<
+    string,
+    { userId: string; userName: string; timestamp: number }[]
+  >; // Track typing indicators by room
 
-  // Actions
+  // UI Actions
   toggleSidebar: () => void;
   setCurrentThread: (threadId: string) => void;
   pinThread: (threadId: string) => void;
@@ -65,20 +79,23 @@ export interface DashboardState {
   toggleThemeMode: () => void;
   createNewThread: (title: string) => string;
 
-  // WebSocket actions
-  connectWebSocket: (roomId: string) => void;
+  // WebSocket Actions
+  connectWebSocket: () => void;
   disconnectWebSocket: () => void;
+  subscribeToRoom: (roomId: string) => void;
+  unsubscribeFromRoom: (roomId: string) => void;
   sendMessage: (content: string) => void;
   sendTypingIndicator: (isTyping: boolean) => void;
+  markMessagesAsRead: (messageIds: string[]) => void;
 
-  // Messages actions
+  // Message Actions
   setMessages: (messages: Message[]) => void;
   addMessage: (message: Message) => void;
   loadMessages: (roomId: string, reset?: boolean) => Promise<void>;
   loadMoreMessages: () => Promise<void>;
 }
 
-// Create the store with persistence
+// Create the store with persistence that works in Next.js
 export const useDashboardStore = create<DashboardState>()(
   persist(
     (set, get) => ({
@@ -132,19 +149,28 @@ export const useDashboardStore = create<DashboardState>()(
       messages: [],
       isLoadingMessages: false,
       messagesError: null,
+      activeRooms: new Set<string>(),
+      typingUsers: {},
 
       // UI Actions
       toggleSidebar: () =>
         set((state) => ({ sidebarOpen: !state.sidebarOpen })),
 
       setCurrentThread: (threadId) => {
+        const currentThreadId = get().currentThreadId;
+
+        // If we're already on this thread, do nothing
+        if (currentThreadId === threadId) return;
+
+        // Unsubscribe from current room if we have one
+        if (currentThreadId) {
+          get().unsubscribeFromRoom(currentThreadId);
+        }
+
         set({ currentThreadId: threadId });
 
-        // When changing threads, we should connect to the WebSocket for this room
-        get().connectWebSocket(threadId);
-
-        // And load messages for this thread
-        get().loadMessages(threadId, true);
+        // Subscribe to the new room
+        get().subscribeToRoom(threadId);
       },
 
       pinThread: (threadId) =>
@@ -170,9 +196,9 @@ export const useDashboardStore = create<DashboardState>()(
             threads: group.threads.filter((thread) => thread.id !== threadId),
           }));
 
-          // If we're deleting the current thread, disconnect the WebSocket
+          // If we're deleting the current thread, unsubscribe from it
           if (state.currentThreadId === threadId) {
-            get().disconnectWebSocket();
+            get().unsubscribeFromRoom(threadId);
             set({ currentThreadId: null, messages: [] });
           }
 
@@ -217,8 +243,11 @@ export const useDashboardStore = create<DashboardState>()(
               messages: [],
             });
 
-            // Connect to the websocket for the new thread
-            get().connectWebSocket(id);
+            // Subscribe to the new room if we're connected
+            const { status } = get().wsConnection;
+            if (status === "connected") {
+              get().subscribeToRoom(id);
+            }
           }
 
           return {};
@@ -228,7 +257,7 @@ export const useDashboardStore = create<DashboardState>()(
       },
 
       // WebSocket Actions
-      connectWebSocket: (roomId) => {
+      connectWebSocket: () => {
         // Disconnect existing connection if any
         get().disconnectWebSocket();
 
@@ -246,18 +275,27 @@ export const useDashboardStore = create<DashboardState>()(
 
         set({ wsConnection: { status: "connecting", instance: null } });
 
-        // Connect to WebSocket
-        const wsUrl = `${process.env.NEXT_PUBLIC_WS_URL || "ws://localhost:8080"}/api/ws/room/${roomId}?token=${token}`;
+        // Connect to WebSocket (single connection for all rooms)
+        const wsUrl = `${process.env.NEXT_PUBLIC_WS_URL || "ws://localhost:8080"}/api/ws?token=${token}`;
         const ws = new WebSocket(wsUrl);
 
         ws.onopen = () => {
           set({ wsConnection: { status: "connected", instance: ws } });
-          console.log(`Connected to WebSocket for room ${roomId}`);
+          console.log("Connected to WebSocket");
+
+          // Subscribe to current room if we have one
+          const currentThreadId = get().currentThreadId;
+          if (currentThreadId) {
+            get().subscribeToRoom(currentThreadId);
+          }
         };
 
         ws.onclose = () => {
-          set({ wsConnection: { status: "disconnected", instance: null } });
-          console.log(`Disconnected from WebSocket for room ${roomId}`);
+          set({
+            wsConnection: { status: "disconnected", instance: null },
+            activeRooms: new Set<string>(),
+          });
+          console.log("Disconnected from WebSocket");
         };
 
         ws.onerror = (error) => {
@@ -270,11 +308,128 @@ export const useDashboardStore = create<DashboardState>()(
             const data = JSON.parse(event.data);
 
             // Handle different message types
-            if (data.type === "message") {
-              // Add the new message to our store
-              get().addMessage(data.payload);
+            switch (data.type) {
+              case "message":
+                // Add the new message to our store if it's for the current room
+                if (data.room_id === get().currentThreadId) {
+                  const message: Message = {
+                    id: data.data?.id || `msg-${Date.now()}`,
+                    content: data.content,
+                    room_id: data.room_id,
+                    user_id: data.user_id,
+                    created_at: data.timestamp,
+                    formatted: {
+                      role:
+                        data.user_id === "system"
+                          ? "system"
+                          : data.user_id === localStorage.getItem("userId")
+                            ? "user"
+                            : "assistant",
+                      timestamp: new Date(data.timestamp),
+                    },
+                  };
+                  get().addMessage(message);
+                }
+
+                // Update thread's lastUpdated
+                set((state) => {
+                  const newThreads = state.threads.map((group) => ({
+                    ...group,
+                    threads: group.threads.map((thread) => {
+                      if (thread.id === data.room_id) {
+                        return {
+                          ...thread,
+                          lastUpdated: new Date(),
+                        };
+                      }
+                      return thread;
+                    }),
+                  }));
+
+                  return { threads: newThreads };
+                });
+                break;
+
+              case "typing":
+                // Handle typing indicators
+                if (
+                  data.room_id === get().currentThreadId &&
+                  data.user_id !== localStorage.getItem("userId")
+                ) {
+                  const userName = data.data?.user_name || "Someone";
+                  const isTyping = data.data?.is_typing;
+
+                  set((state) => {
+                    // Copy current typing users
+                    const typingUsers = { ...state.typingUsers };
+
+                    // Get or initialize the room's typing users array
+                    if (!typingUsers[data.room_id]) {
+                      typingUsers[data.room_id] = [];
+                    }
+
+                    // Filter out this user
+                    typingUsers[data.room_id] = typingUsers[
+                      data.room_id
+                    ].filter((user) => user.userId !== data.user_id);
+
+                    // Add user if they're typing
+                    if (isTyping) {
+                      typingUsers[data.room_id].push({
+                        userId: data.user_id,
+                        userName: userName,
+                        timestamp: Date.now(),
+                      });
+                    }
+
+                    return { typingUsers };
+                  });
+
+                  // Automatically clear typing indicators after 3 seconds
+                  setTimeout(() => {
+                    set((state) => {
+                      const now = Date.now();
+                      const typingUsers = { ...state.typingUsers };
+
+                      if (typingUsers[data.room_id]) {
+                        // Remove typing indicators older than 3 seconds
+                        typingUsers[data.room_id] = typingUsers[
+                          data.room_id
+                        ].filter((user) => now - user.timestamp < 3000);
+
+                        if (typingUsers[data.room_id].length === 0) {
+                          delete typingUsers[data.room_id];
+                        }
+                      }
+
+                      return { typingUsers };
+                    });
+                  }, 3000);
+                }
+                break;
+
+              case "system":
+                // Handle system messages like user joined/left
+                if (data.room_id === get().currentThreadId) {
+                  const systemMessage: Message = {
+                    id: `system-${Date.now()}`,
+                    content: `${data.data?.user_name || "Someone"} ${data.action || "performed an action"}`,
+                    room_id: data.room_id,
+                    user_id: "system",
+                    created_at: data.timestamp,
+                    formatted: {
+                      role: "system",
+                      timestamp: new Date(data.timestamp),
+                    },
+                  };
+                  get().addMessage(systemMessage);
+                }
+                break;
+
+              case "read":
+                // Handle read receipts (future implementation)
+                break;
             }
-            // Handle other message types like typing indicators, etc.
           } catch (error) {
             console.error("Failed to parse WebSocket message:", error);
           }
@@ -288,7 +443,57 @@ export const useDashboardStore = create<DashboardState>()(
           instance.close();
         }
 
-        set({ wsConnection: { status: "idle", instance: null } });
+        set({
+          wsConnection: { status: "idle", instance: null },
+          activeRooms: new Set<string>(),
+        });
+      },
+
+      subscribeToRoom: (roomId) => {
+        const { instance, status } = get().wsConnection;
+
+        if (!roomId || status !== "connected" || !instance) return;
+
+        // Create a subscribe message
+        const message: WSMessage = {
+          type: "subscribe",
+          room_id: roomId,
+        };
+
+        // Send subscription request
+        instance.send(JSON.stringify(message));
+
+        // Update active rooms
+        set((state) => {
+          const newActiveRooms = new Set(state.activeRooms);
+          newActiveRooms.add(roomId);
+          return { activeRooms: newActiveRooms };
+        });
+
+        // Load messages for this room
+        get().loadMessages(roomId, true);
+      },
+
+      unsubscribeFromRoom: (roomId) => {
+        const { instance, status } = get().wsConnection;
+
+        if (!roomId || status !== "connected" || !instance) return;
+
+        // Create an unsubscribe message
+        const message: WSMessage = {
+          type: "unsubscribe",
+          room_id: roomId,
+        };
+
+        // Send unsubscription request
+        instance.send(JSON.stringify(message));
+
+        // Update active rooms
+        set((state) => {
+          const newActiveRooms = new Set(state.activeRooms);
+          newActiveRooms.delete(roomId);
+          return { activeRooms: newActiveRooms };
+        });
       },
 
       sendMessage: (content) => {
@@ -297,16 +502,15 @@ export const useDashboardStore = create<DashboardState>()(
 
         if (!content.trim() || !currentThreadId) return;
 
+        // Create a standardized message
+        const message: WSMessage = {
+          type: "message",
+          room_id: currentThreadId,
+          content: content.trim(),
+        };
+
         // If WebSocket is connected, send through there
         if (instance && status === "connected") {
-          const message = {
-            type: "message",
-            payload: {
-              content,
-              room_id: currentThreadId,
-            },
-          };
-
           instance.send(JSON.stringify(message));
         } else {
           // Otherwise, use the REST API as fallback
@@ -316,8 +520,9 @@ export const useDashboardStore = create<DashboardState>()(
               method: "POST",
               headers: {
                 "Content-Type": "application/json",
+                Authorization: `Bearer ${localStorage.getItem("accessToken")}`,
               },
-              body: JSON.stringify({ content }),
+              body: JSON.stringify({ content: content.trim() }),
             })
               .then((response) => {
                 if (!response.ok) throw new Error("Failed to send message");
@@ -330,7 +535,7 @@ export const useDashboardStore = create<DashboardState>()(
               .catch((error) => {
                 console.error("Error sending message:", error);
                 // Attempt to reconnect WebSocket
-                get().connectWebSocket(currentThreadId);
+                get().connectWebSocket();
               });
           }
         }
@@ -342,12 +547,31 @@ export const useDashboardStore = create<DashboardState>()(
 
         if (!currentThreadId || status !== "connected" || !instance) return;
 
-        const message = {
+        const message: WSMessage = {
           type: "typing",
-          payload: {
-            is_typing: isTyping,
-            room_id: currentThreadId,
-          },
+          room_id: currentThreadId,
+          data: { is_typing: isTyping },
+        };
+
+        instance.send(JSON.stringify(message));
+      },
+
+      markMessagesAsRead: (messageIds) => {
+        const { instance, status } = get().wsConnection;
+        const currentThreadId = get().currentThreadId;
+
+        if (
+          !messageIds.length ||
+          !currentThreadId ||
+          status !== "connected" ||
+          !instance
+        )
+          return;
+
+        const message: WSMessage = {
+          type: "read",
+          room_id: currentThreadId,
+          data: { message_ids: messageIds },
         };
 
         instance.send(JSON.stringify(message));
@@ -382,7 +606,12 @@ export const useDashboardStore = create<DashboardState>()(
 
           // Load messages from API
           const response = await fetch(
-            `/api/chat/${roomId}?offset=${offset}&limit=50`,
+            `/api/rooms/${roomId}/messages?offset=${offset}&limit=50`,
+            {
+              headers: {
+                Authorization: `Bearer ${localStorage.getItem("accessToken")}`,
+              },
+            },
           );
 
           if (!response.ok) {
@@ -447,7 +676,7 @@ export const useDashboardStore = create<DashboardState>()(
     }),
     {
       name: "dashboard-storage",
-      // Only persist certain parts of the state
+      // Only persist certain parts of the state to avoid Next.js hydration issues
       partialize: (state) => ({
         themeMode: state.themeMode,
         threads: state.threads.map((group) => ({
@@ -459,6 +688,19 @@ export const useDashboardStore = create<DashboardState>()(
             lastUpdated: thread.lastUpdated,
           })),
         })),
+      }),
+      // Use createJSONStorage for Next.js compatibility
+      storage: createJSONStorage(() => {
+        // Use localStorage only on the client side
+        if (typeof window !== "undefined") {
+          return localStorage;
+        }
+        // Return a dummy storage for SSR
+        return {
+          getItem: () => null,
+          setItem: () => null,
+          removeItem: () => null,
+        };
       }),
     },
   ),

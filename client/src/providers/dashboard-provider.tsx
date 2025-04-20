@@ -13,6 +13,7 @@ import {
   ThreadGroup,
   Message,
 } from "@/stores/dashboardStore";
+import { usePathname } from "next/navigation";
 
 // Create a context for dashboard with proper types
 export type DashboardContextType = {
@@ -29,15 +30,20 @@ export type DashboardContextType = {
   toggleThemeMode: () => void;
   createNewThread: (title: string) => string;
 
-  // New WebSocket properties
+  // WebSocket properties
   wsStatus: "connected" | "disconnected" | "connecting" | "error" | "idle";
   messages: Message[];
   isLoadingMessages: boolean;
   messagesError: string | null;
+  typingUsers: Record<
+    string,
+    { userId: string; userName: string; timestamp: number }[]
+  >;
 
-  // New WebSocket methods
+  // WebSocket methods
   sendMessage: (content: string) => void;
   sendTypingIndicator: (isTyping: boolean) => void;
+  markMessagesAsRead: (messageIds: string[]) => void;
   loadMoreMessages: () => Promise<void>;
 };
 
@@ -69,16 +75,29 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
     messages,
     isLoadingMessages,
     messagesError,
+    typingUsers,
 
     // WebSocket & Messages actions
     connectWebSocket,
     disconnectWebSocket,
     sendMessage,
     sendTypingIndicator,
+    markMessagesAsRead,
     loadMoreMessages,
   } = useDashboardStore();
 
   const [isInitialized, setIsInitialized] = useState(false);
+  const pathname = usePathname();
+
+  // Extract thread ID from pathname if available
+  useEffect(() => {
+    if (pathname?.startsWith("/chat/")) {
+      const threadId = pathname.replace("/chat/", "");
+      if (threadId && threadId !== currentThreadId) {
+        setCurrentThread(threadId);
+      }
+    }
+  }, [pathname, currentThreadId, setCurrentThread]);
 
   // Initialize dashboard state on client-side only
   useEffect(() => {
@@ -95,29 +114,84 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
     }
   }, [themeMode]);
 
+  // Initialize WebSocket connection on mount
+  useEffect(() => {
+    if (typeof window === "undefined" || !isInitialized) return;
+
+    connectWebSocket();
+
+    return () => {
+      disconnectWebSocket();
+    };
+  }, [isInitialized, connectWebSocket, disconnectWebSocket]);
+
   // Auto-reconnect WebSocket on network connectivity changes
   useEffect(() => {
     if (typeof window === "undefined" || !isInitialized) return;
 
     const handleOnline = () => {
-      if (currentThreadId) {
-        connectWebSocket(currentThreadId);
-      }
+      connectWebSocket();
+    };
+
+    const handleOffline = () => {
+      // We'll let the WebSocket naturally disconnect
+      // but we'll update the UI to show disconnected state
+      useDashboardStore.setState({
+        wsConnection: {
+          status: "disconnected",
+          instance: wsConnection.instance,
+        },
+      });
     };
 
     window.addEventListener("online", handleOnline);
+    window.addEventListener("offline", handleOffline);
 
     return () => {
       window.removeEventListener("online", handleOnline);
+      window.removeEventListener("offline", handleOffline);
     };
-  }, [isInitialized, currentThreadId, connectWebSocket]);
+  }, [isInitialized, connectWebSocket, wsConnection.instance]);
 
-  // Clean up WebSocket on unmount
+  // Setup typing indicator auto-clearing
   useEffect(() => {
-    return () => {
-      disconnectWebSocket();
-    };
-  }, [disconnectWebSocket]);
+    if (typeof window === "undefined") return;
+
+    // Set up a timer to regularly check for stale typing indicators
+    const timer = setInterval(() => {
+      if (Object.keys(typingUsers).length > 0) {
+        const now = Date.now();
+        let hasChanges = false;
+
+        const updatedTypingUsers = { ...typingUsers };
+
+        // Check each room
+        Object.keys(updatedTypingUsers).forEach((roomId) => {
+          // Filter out typing indicators older than 3 seconds
+          const freshTypers = updatedTypingUsers[roomId].filter(
+            (user) => now - user.timestamp < 3000,
+          );
+
+          if (freshTypers.length !== updatedTypingUsers[roomId].length) {
+            hasChanges = true;
+
+            if (freshTypers.length === 0) {
+              delete updatedTypingUsers[roomId];
+            } else {
+              updatedTypingUsers[roomId] = freshTypers;
+            }
+          }
+        });
+
+        // Only update state if there were changes
+        if (hasChanges) {
+          useDashboardStore.setState({ typingUsers: updatedTypingUsers });
+        }
+      }
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, [typingUsers]);
 
   // Create the context value
   const contextValue: DashboardContextType = {
@@ -139,10 +213,12 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
     messages,
     isLoadingMessages,
     messagesError,
+    typingUsers,
 
     // WebSocket methods
     sendMessage,
     sendTypingIndicator,
+    markMessagesAsRead,
     loadMoreMessages,
   };
 
