@@ -2,36 +2,23 @@
 
 import { useState, useRef, useEffect } from "react";
 import Link from "next/link";
-import { useRouter, usePathname } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
-import { useDashboardStore } from "@/stores/dashboardStore";
+import { useDashboard } from "@/providers/dashboard-provider";
 
-// Types
-interface Message {
-  id: string;
-  role: "user" | "assistant" | "system";
-  content: string;
-  timestamp: Date;
-}
-
-interface Thread {
-  id: string;
-  title: string;
-  isPinned?: boolean;
-  lastUpdated: Date;
-}
-
-interface ThreadGroup {
-  id: string;
-  label: string;
-  threads: Thread[];
-}
-
-const Dashboard = () => {
+type DashboardProps = {
+  initialChatId?: string;
+  initialMessages?: any[];
+  chatDetails?: any;
+};
+const Dashboard: React.FC<DashboardProps> = ({
+  initialChatId,
+  initialMessages = [],
+  chatDetails = null,
+}) => {
   const router = useRouter();
-  const pathname = usePathname();
 
-  // Access state from store
+  // Access state from context
   const {
     sidebarOpen,
     toggleSidebar,
@@ -45,14 +32,69 @@ const Dashboard = () => {
     pinThread,
     deleteThread,
     createNewThread,
-  } = useDashboardStore();
+
+    // WebSocket properties
+    wsStatus,
+    messages,
+    isLoadingMessages,
+    messagesError,
+    typingUsers,
+
+    // WebSocket methods
+    sendMessage,
+    sendTypingIndicator,
+    loadMoreMessages,
+  } = useDashboard();
 
   // Local state
-  const [messages, setMessages] = useState<Message[]>([]);
   const [message, setMessage] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
+  // Handle initial props for SSR data
+  useEffect(() => {
+    if (initialChatId && initialChatId !== currentThreadId) {
+      // Set current thread
+      setCurrentThread(initialChatId);
+
+      // Update thread title if we have chat details
+      if (chatDetails && chatDetails.name) {
+        // Find the thread and update its title
+        const updatedThreads = threads.map((group) => ({
+          ...group,
+          threads: group.threads.map((thread) =>
+            thread.id === initialChatId
+              ? { ...thread, title: chatDetails.name }
+              : thread,
+          ),
+        }));
+
+        // You would need to add a method to your store to update threads
+        // For now, we'll assume your store has this capability
+      }
+
+      // Initialize messages if provided
+      if (initialMessages && initialMessages.length > 0) {
+        // Set initial messages in store
+        // You might need to format these messages to match your expected format
+        const formattedMessages = initialMessages.map((msg) => ({
+          ...msg,
+          formatted: {
+            role:
+              msg.user_id === "system"
+                ? "system"
+                : msg.user_id === localStorage.getItem("userId")
+                  ? "user"
+                  : "assistant",
+            timestamp: new Date(msg.created_at || msg.timestamp),
+          },
+        }));
+
+        // Set messages directly
+        // This would require adding a method to your store if not already present
+      }
+    }
+  }, [initialChatId, initialMessages, chatDetails]);
 
   // Auto resize textarea based on content
   useEffect(() => {
@@ -65,7 +107,17 @@ const Dashboard = () => {
 
   // Scroll to bottom on new messages
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    // Only auto-scroll if we're near the bottom already
+    if (messagesContainerRef.current) {
+      const container = messagesContainerRef.current;
+      const isNearBottom =
+        container.scrollHeight - container.scrollTop - container.clientHeight <
+        100;
+
+      if (isNearBottom || messages.length <= 1) {
+        messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+      }
+    }
   }, [messages]);
 
   // Handle sending a message
@@ -75,61 +127,20 @@ const Dashboard = () => {
 
     // Create a new thread if none is selected
     if (!currentThreadId) {
-      const newThreadId = createNewThread(message.substring(0, 30) + "...");
-      handleSendMessage(message);
+      const title =
+        message.length > 30 ? message.substring(0, 27) + "..." : message;
+
+      const newThreadId = createNewThread(title);
+      sendMessage(message);
       router.push(`/chat/${newThreadId}`);
     } else {
-      handleSendMessage(message);
+      sendMessage(message);
     }
 
     setMessage("");
-  };
 
-  // Send message to API & handle response
-  const handleSendMessage = async (messageText: string) => {
-    // Add user message to UI
-    const userMessage: Message = {
-      id: `user-${Date.now()}`,
-      role: "user",
-      content: messageText,
-      timestamp: new Date(),
-    };
-
-    setMessages((prev) => [...prev, userMessage]);
-    setIsLoading(true);
-
-    try {
-      // Send message to API if we have a thread ID
-      if (currentThreadId) {
-        const response = await fetch(`/api/chat/${currentThreadId}`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({ content: messageText }),
-        });
-
-        if (!response.ok) {
-          throw new Error("Failed to send message");
-        }
-      }
-
-      // For demo: simulate a response
-      setTimeout(() => {
-        const assistantMessage: Message = {
-          id: `assistant-${Date.now()}`,
-          role: "assistant",
-          content: `Meow! Cat has received your message: "${messageText}" nya~`,
-          timestamp: new Date(),
-        };
-
-        setMessages((prev) => [...prev, assistantMessage]);
-        setIsLoading(false);
-      }, 1000);
-    } catch (error) {
-      console.error("Error sending message:", error);
-      setIsLoading(false);
-    }
+    // Reset typing indicator
+    sendTypingIndicator(false);
   };
 
   // Handle thread selection
@@ -153,6 +164,72 @@ const Dashboard = () => {
       }
     }
   };
+
+  // Custom debounce implementation
+  const [typingTimeout, setTypingTimeout] = useState<NodeJS.Timeout | null>(
+    null,
+  );
+
+  // Handle message input change
+  const handleMessageChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const newValue = e.target.value;
+    setMessage(newValue);
+
+    // Send typing indicator
+    if (newValue.trim()) {
+      // Clear existing timeout if any
+      if (typingTimeout) {
+        clearTimeout(typingTimeout);
+      }
+
+      // Send typing indicator immediately
+      sendTypingIndicator(true);
+
+      // Set timeout to stop typing indicator after 2 seconds of inactivity
+      const timeout = setTimeout(() => {
+        sendTypingIndicator(false);
+      }, 2000);
+
+      setTypingTimeout(timeout);
+    } else {
+      // If message is empty, immediately send not typing
+      if (typingTimeout) {
+        clearTimeout(typingTimeout);
+      }
+      sendTypingIndicator(false);
+    }
+  };
+
+  // Cleanup timeout
+  useEffect(() => {
+    return () => {
+      if (typingTimeout) {
+        clearTimeout(typingTimeout);
+      }
+    };
+  }, [typingTimeout]);
+
+  // Handle scroll to load more messages
+  const handleScroll = () => {
+    if (!messagesContainerRef.current || isLoadingMessages) return;
+
+    const { scrollTop } = messagesContainerRef.current;
+
+    // If we're near the top, load more messages
+    if (scrollTop < 50) {
+      loadMoreMessages();
+    }
+  };
+
+  // Get current thread info
+  const currentThread = threads
+    .flatMap((g) => g.threads)
+    .find((t) => t.id === currentThreadId);
+
+  // Get typing users for current room
+  const currentRoomTypingUsers = currentThreadId
+    ? typingUsers[currentThreadId] || []
+    : [];
 
   return (
     <div className="flex h-screen bg-gray-100 dark:bg-gray-900">
@@ -215,7 +292,7 @@ const Dashboard = () => {
                   {group.threads.map((thread) => (
                     <li key={thread.id} className="mb-1">
                       <div
-                        className={`relative flex items-center p-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer ${
+                        className={`relative group flex items-center p-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer ${
                           currentThreadId === thread.id
                             ? "bg-gray-100 dark:bg-gray-700"
                             : ""
@@ -226,7 +303,7 @@ const Dashboard = () => {
                           {thread.title}
                         </span>
 
-                        {/* Thread Actions - Only show on hover */}
+                        {/* Thread Actions - Show on hover */}
                         <div className="absolute right-0 flex space-x-1 opacity-0 group-hover:opacity-100 transition-opacity">
                           <button
                             className="p-1 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
@@ -234,8 +311,9 @@ const Dashboard = () => {
                               e.stopPropagation();
                               pinThread(thread.id);
                             }}
+                            title={thread.isPinned ? "Unpin" : "Pin"}
                           >
-                            📌
+                            {thread.isPinned ? "📌" : "📌"}
                           </button>
                           <button
                             className="p-1 text-gray-500 hover:text-red-500 dark:text-gray-400 dark:hover:text-red-400"
@@ -243,6 +321,7 @@ const Dashboard = () => {
                               e.stopPropagation();
                               deleteThread(thread.id);
                             }}
+                            title="Delete"
                           >
                             ❌
                           </button>
@@ -294,13 +373,31 @@ const Dashboard = () => {
         <div className="h-full flex flex-col">
           {/* Header */}
           <header className="bg-white dark:bg-gray-800 shadow-sm p-4 flex justify-between items-center">
-            <h2 className="text-lg font-semibold dark:text-gray-200">
-              {currentThreadId
-                ? threads
-                    .flatMap((g) => g.threads)
-                    .find((t) => t.id === currentThreadId)?.title || "Chat"
-                : "New Chat"}
-            </h2>
+            <div className="flex items-center">
+              <h2 className="text-lg font-semibold dark:text-gray-200">
+                {currentThread?.title || "New Chat"}
+              </h2>
+
+              {/* Connection Status Indicator */}
+              <div className="ml-3 flex items-center">
+                <span
+                  className={`w-2 h-2 rounded-full ${
+                    wsStatus === "connected"
+                      ? "bg-green-500"
+                      : wsStatus === "connecting"
+                        ? "bg-yellow-500"
+                        : "bg-red-500"
+                  }`}
+                ></span>
+                <span className="ml-1 text-xs text-gray-500 dark:text-gray-400">
+                  {wsStatus === "connected"
+                    ? "Connected"
+                    : wsStatus === "connecting"
+                      ? "Connecting..."
+                      : "Disconnected"}
+                </span>
+              </div>
+            </div>
 
             <div className="flex items-center space-x-2">
               <button
@@ -319,7 +416,33 @@ const Dashboard = () => {
           </header>
 
           {/* Messages Area */}
-          <div className="flex-1 overflow-y-auto p-4 bg-gray-50 dark:bg-gray-900">
+          <div
+            className="flex-1 overflow-y-auto p-4 bg-gray-50 dark:bg-gray-900"
+            ref={messagesContainerRef}
+            onScroll={handleScroll}
+          >
+            {isLoadingMessages && messages.length > 0 && (
+              <div className="flex justify-center mb-4">
+                <div className="flex space-x-2 items-center">
+                  <div className="w-2 h-2 rounded-full bg-gray-400 dark:bg-gray-600 animate-bounce"></div>
+                  <div
+                    className="w-2 h-2 rounded-full bg-gray-400 dark:bg-gray-600 animate-bounce"
+                    style={{ animationDelay: "0.2s" }}
+                  ></div>
+                  <div
+                    className="w-2 h-2 rounded-full bg-gray-400 dark:bg-gray-600 animate-bounce"
+                    style={{ animationDelay: "0.4s" }}
+                  ></div>
+                </div>
+              </div>
+            )}
+
+            {messagesError && (
+              <div className="text-center mb-4 text-red-500 dark:text-red-400">
+                {messagesError}
+              </div>
+            )}
+
             {/* If no messages yet, show welcome screen */}
             {messages.length === 0 ? (
               <div className="h-full flex flex-col items-center justify-center">
@@ -330,7 +453,7 @@ const Dashboard = () => {
                   className="max-w-md w-full text-center space-y-6"
                 >
                   <h2 className="text-2xl font-bold dark:text-gray-200">
-                    How can I help you?
+                    Meow! How can Cat help you today?
                   </h2>
 
                   {/* Suggestion Buttons */}
@@ -361,7 +484,7 @@ const Dashboard = () => {
                     {[
                       "How does AI work?",
                       "Are black holes real?",
-                      'How many Rs are in the word "strawberry"?',
+                      "Tell me about WebSockets",
                       "What is the meaning of life?",
                     ].map((question, index) => (
                       <motion.button
@@ -386,40 +509,50 @@ const Dashboard = () => {
                       animate={{ opacity: 1, y: 0 }}
                       exit={{ opacity: 0 }}
                       transition={{ duration: 0.3 }}
-                      className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}
+                      className={`flex ${msg.formatted?.role === "user" ? "justify-end" : "justify-start"}`}
                     >
                       <div
                         className={`max-w-[80%] rounded-lg p-3 ${
-                          msg.role === "user"
+                          msg.formatted?.role === "user"
                             ? "bg-pink-600 text-white"
-                            : "bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200"
+                            : msg.formatted?.role === "system"
+                              ? "bg-gray-300 dark:bg-gray-700 text-gray-800 dark:text-gray-200 text-xs italic"
+                              : "bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200"
                         }`}
                       >
                         <p>{msg.content}</p>
                         <div className="mt-1 text-xs opacity-70">
-                          {msg.timestamp.toLocaleTimeString()}
+                          {msg.formatted?.timestamp.toLocaleTimeString()}
                         </div>
                       </div>
                     </motion.div>
                   ))}
                 </AnimatePresence>
 
-                {isLoading && (
+                {/* Typing indicator */}
+                {currentRoomTypingUsers.length > 0 && (
                   <motion.div
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
-                    className="flex justify-center"
+                    className="flex justify-start"
                   >
-                    <div className="flex space-x-2 items-center">
-                      <div className="w-2 h-2 rounded-full bg-gray-400 dark:bg-gray-600 animate-bounce"></div>
-                      <div
-                        className="w-2 h-2 rounded-full bg-gray-400 dark:bg-gray-600 animate-bounce"
-                        style={{ animationDelay: "0.2s" }}
-                      ></div>
-                      <div
-                        className="w-2 h-2 rounded-full bg-gray-400 dark:bg-gray-600 animate-bounce"
-                        style={{ animationDelay: "0.4s" }}
-                      ></div>
+                    <div className="flex items-center bg-gray-200 dark:bg-gray-700 rounded-lg p-2 text-xs text-gray-700 dark:text-gray-300">
+                      <span>
+                        {currentRoomTypingUsers.length === 1
+                          ? `${currentRoomTypingUsers[0].userName} is typing`
+                          : `${currentRoomTypingUsers.length} people are typing`}
+                      </span>
+                      <div className="flex space-x-1 ml-2">
+                        <div className="w-1 h-1 rounded-full bg-gray-500 animate-bounce"></div>
+                        <div
+                          className="w-1 h-1 rounded-full bg-gray-500 animate-bounce"
+                          style={{ animationDelay: "0.2s" }}
+                        ></div>
+                        <div
+                          className="w-1 h-1 rounded-full bg-gray-500 animate-bounce"
+                          style={{ animationDelay: "0.4s" }}
+                        ></div>
+                      </div>
                     </div>
                   </motion.div>
                 )}
@@ -439,7 +572,7 @@ const Dashboard = () => {
                   className="w-full p-3 pr-12 border dark:border-gray-700 rounded-lg resize-none bg-gray-50 dark:bg-gray-900 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-pink-500"
                   rows={1}
                   value={message}
-                  onChange={(e) => setMessage(e.target.value)}
+                  onChange={handleMessageChange}
                   onKeyDown={handleKeyDown}
                 ></textarea>
 
@@ -452,9 +585,9 @@ const Dashboard = () => {
                   </button>
                   <button
                     type="submit"
-                    disabled={!message.trim()}
+                    disabled={!message.trim() || wsStatus !== "connected"}
                     className={`ml-2 p-1 rounded-full ${
-                      message.trim()
+                      message.trim() && wsStatus === "connected"
                         ? "bg-pink-600 hover:bg-pink-700 text-white"
                         : "bg-gray-300 dark:bg-gray-700 text-gray-500 dark:text-gray-400 cursor-not-allowed"
                     }`}
@@ -465,7 +598,7 @@ const Dashboard = () => {
               </div>
 
               <div className="flex items-center text-xs text-gray-500 dark:text-gray-400">
-                <span>GPT-4.1 Mini</span>
+                <span>Meow Mini</span>
                 <span className="ml-1">🔽</span>
               </div>
             </form>
