@@ -80,7 +80,7 @@ export interface DashboardState {
   createNewThread: (title: string) => string;
 
   // WebSocket Actions
-  connectWebSocket: () => void;
+  connectWebSocket: (roomId: any) => void;
   disconnectWebSocket: () => void;
   subscribeToRoom: (roomId: string) => void;
   unsubscribeFromRoom: (roomId: string) => void;
@@ -257,183 +257,70 @@ export const useDashboardStore = create<DashboardState>()(
       },
 
       // WebSocket Actions
-      connectWebSocket: () => {
+      // Updated connectWebSocket function for dashboardStore.ts
+
+      connectWebSocket: async (roomId: any) => {
         // Disconnect existing connection if any
         get().disconnectWebSocket();
 
-        // Get token
-        const token =
-          typeof window !== "undefined"
-            ? localStorage.getItem("accessToken")
-            : null;
-
-        if (!token) {
-          set({ wsConnection: { status: "error", instance: null } });
-          console.error("Cannot connect to WebSocket: No auth token found");
-          return;
-        }
-
         set({ wsConnection: { status: "connecting", instance: null } });
 
-        // Connect to WebSocket (single connection for all rooms)
-        const wsUrl = `${process.env.NEXT_PUBLIC_WS_URL || "ws://localhost:8080"}/api/ws?token=${token}`;
-        const ws = new WebSocket(wsUrl);
+        try {
+          // Get token from existing API endpoint with 'ws' purpose
+          const response = await fetch("/api/auth/cookie?purpose=ws");
 
-        ws.onopen = () => {
-          set({ wsConnection: { status: "connected", instance: ws } });
-          console.log("Connected to WebSocket");
-
-          // Subscribe to current room if we have one
-          const currentThreadId = get().currentThreadId;
-          if (currentThreadId) {
-            get().subscribeToRoom(currentThreadId);
+          if (!response.ok) {
+            throw new Error("Failed to get authentication token");
           }
-        };
 
-        ws.onclose = () => {
-          set({
-            wsConnection: { status: "disconnected", instance: null },
-            activeRooms: new Set<string>(),
-          });
-          console.log("Disconnected from WebSocket");
-        };
+          const data = await response.json();
+          const token = data.token;
 
-        ws.onerror = (error) => {
-          set({ wsConnection: { status: "error", instance: null } });
-          console.error("WebSocket error:", error);
-        };
+          if (!token) {
+            set({ wsConnection: { status: "error", instance: null } });
+            console.error("Cannot connect to WebSocket: No auth token found");
+            return;
+          }
 
-        ws.onmessage = (event) => {
-          try {
-            const data = JSON.parse(event.data);
+          // Connect to WebSocket with the token
+          const wsUrl = `${process.env.NEXT_PUBLIC_WS_URL || "ws://backend:8080"}/api/ws/room/${roomId}?token=${token}`;
+          const ws = new WebSocket(wsUrl);
 
-            // Handle different message types
-            switch (data.type) {
-              case "message":
-                // Add the new message to our store if it's for the current room
-                if (data.room_id === get().currentThreadId) {
-                  const message: Message = {
-                    id: data.data?.id || `msg-${Date.now()}`,
-                    content: data.content,
-                    room_id: data.room_id,
-                    user_id: data.user_id,
-                    created_at: data.timestamp,
-                    formatted: {
-                      role:
-                        data.user_id === "system"
-                          ? "system"
-                          : data.user_id === localStorage.getItem("userId")
-                            ? "user"
-                            : "assistant",
-                      timestamp: new Date(data.timestamp),
-                    },
-                  };
-                  get().addMessage(message);
-                }
+          ws.onopen = () => {
+            set({ wsConnection: { status: "connected", instance: ws } });
+            console.log(`Connected to WebSocket for room ${roomId}, nya~!`);
+          };
 
-                // Update thread's lastUpdated
-                set((state) => {
-                  const newThreads = state.threads.map((group) => ({
-                    ...group,
-                    threads: group.threads.map((thread) => {
-                      if (thread.id === data.room_id) {
-                        return {
-                          ...thread,
-                          lastUpdated: new Date(),
-                        };
-                      }
-                      return thread;
-                    }),
-                  }));
+          ws.onclose = () => {
+            set({ wsConnection: { status: "disconnected", instance: null } });
+            console.log(
+              `Disconnected from WebSocket for room ${roomId}, meow!`,
+            );
+          };
 
-                  return { threads: newThreads };
-                });
-                break;
+          ws.onerror = (error) => {
+            set({ wsConnection: { status: "error", instance: null } });
+            console.error("WebSocket error:", error);
+          };
 
-              case "typing":
-                // Handle typing indicators
-                if (
-                  data.room_id === get().currentThreadId &&
-                  data.user_id !== localStorage.getItem("userId")
-                ) {
-                  const userName = data.data?.user_name || "Someone";
-                  const isTyping = data.data?.is_typing;
+          ws.onmessage = (event) => {
+            try {
+              const data = JSON.parse(event.data);
 
-                  set((state) => {
-                    // Copy current typing users
-                    const typingUsers = { ...state.typingUsers };
-
-                    // Get or initialize the room's typing users array
-                    if (!typingUsers[data.room_id]) {
-                      typingUsers[data.room_id] = [];
-                    }
-
-                    // Filter out this user
-                    typingUsers[data.room_id] = typingUsers[
-                      data.room_id
-                    ].filter((user) => user.userId !== data.user_id);
-
-                    // Add user if they're typing
-                    if (isTyping) {
-                      typingUsers[data.room_id].push({
-                        userId: data.user_id,
-                        userName: userName,
-                        timestamp: Date.now(),
-                      });
-                    }
-
-                    return { typingUsers };
-                  });
-
-                  // Automatically clear typing indicators after 3 seconds
-                  setTimeout(() => {
-                    set((state) => {
-                      const now = Date.now();
-                      const typingUsers = { ...state.typingUsers };
-
-                      if (typingUsers[data.room_id]) {
-                        // Remove typing indicators older than 3 seconds
-                        typingUsers[data.room_id] = typingUsers[
-                          data.room_id
-                        ].filter((user) => now - user.timestamp < 3000);
-
-                        if (typingUsers[data.room_id].length === 0) {
-                          delete typingUsers[data.room_id];
-                        }
-                      }
-
-                      return { typingUsers };
-                    });
-                  }, 3000);
-                }
-                break;
-
-              case "system":
-                // Handle system messages like user joined/left
-                if (data.room_id === get().currentThreadId) {
-                  const systemMessage: Message = {
-                    id: `system-${Date.now()}`,
-                    content: `${data.data?.user_name || "Someone"} ${data.action || "performed an action"}`,
-                    room_id: data.room_id,
-                    user_id: "system",
-                    created_at: data.timestamp,
-                    formatted: {
-                      role: "system",
-                      timestamp: new Date(data.timestamp),
-                    },
-                  };
-                  get().addMessage(systemMessage);
-                }
-                break;
-
-              case "read":
-                // Handle read receipts (future implementation)
-                break;
+              // Handle different message types
+              if (data.type === "message") {
+                // Add the new message to our store
+                get().addMessage(data.payload);
+              }
+              // Handle other message types like typing indicators, etc.
+            } catch (error) {
+              console.error("Failed to parse WebSocket message:", error);
             }
-          } catch (error) {
-            console.error("Failed to parse WebSocket message:", error);
-          }
-        };
+          };
+        } catch (error) {
+          set({ wsConnection: { status: "error", instance: null } });
+          console.error("Error getting auth token:", error);
+        }
       },
 
       disconnectWebSocket: () => {
