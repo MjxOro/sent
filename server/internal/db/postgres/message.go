@@ -1,4 +1,4 @@
-// internal/db/postgres/message_repo.go
+// internal/db/postgres/message.go
 package postgres
 
 import (
@@ -42,9 +42,11 @@ func (r *Message) Create(message *model.Message) error {
 }
 
 // FindByRoomID finds messages in a room with pagination
-func (r *Message) FindByRoomID(roomID string, limit, offset int) ([]*model.Message, error) {
+// Now returns MessageDTO with user information
+func (r *Message) FindByRoomID(roomID string, limit, offset int) ([]*model.MessageDTO, error) {
 	query := `
-		SELECT m.*, u.name as user_name, u.avatar as user_avatar
+		SELECT m.id, m.room_id, m.user_id, m.content, m.created_at, m.updated_at,
+		       u.name as user_name, u.avatar as user_avatar
 		FROM messages m
 		JOIN users u ON m.user_id = u.id
 		WHERE m.room_id = $1
@@ -52,13 +54,26 @@ func (r *Message) FindByRoomID(roomID string, limit, offset int) ([]*model.Messa
 		LIMIT $2 OFFSET $3
 	`
 
-	var messages []*model.Message
+	var messages []*model.MessageDTO
 	err := r.db.Select(&messages, query, roomID, limit, offset)
 	if err != nil {
 		return nil, err
 	}
 
 	return messages, nil
+}
+
+// FindByID finds a message by ID
+func (r *Message) FindByID(id string) (*model.Message, error) {
+	query := `SELECT * FROM messages WHERE id = $1`
+
+	var message model.Message
+	err := r.db.Get(&message, query, id)
+	if err != nil {
+		return nil, err
+	}
+
+	return &message, nil
 }
 
 // MarkAsRead marks a message as read by a user

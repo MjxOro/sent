@@ -43,6 +43,17 @@ type ClientMessage struct {
 	Data    json.RawMessage `json:"data,omitempty"`
 }
 
+// ServerResponse represents responses to the client
+type ServerResponse struct {
+	Type      string          `json:"type"`
+	Success   bool            `json:"success"`
+	Message   string          `json:"message,omitempty"`
+	RoomID    string          `json:"room_id,omitempty"`
+	ThreadID  string          `json:"thread_id,omitempty"`
+	MessageID string          `json:"message_id,omitempty"`
+	Data      json.RawMessage `json:"data,omitempty"`
+}
+
 // HandleConnection handles WebSocket connections
 func (h *WSHandler) HandleConnection(c *gin.Context) {
 	userID := c.GetString("userID")
@@ -133,6 +144,46 @@ func (h *WSHandler) handleMessages(client *websocket.Client, user *model.User) {
 
 		// Process different message types
 		switch clientMsg.Type {
+		case "create_thread":
+			// Handle thread creation with server-side UUID
+			var createData struct {
+				Title string `json:"title"`
+			}
+
+			if err := json.Unmarshal(clientMsg.Data, &createData); err != nil {
+				log.Printf("Error parsing thread creation data: %v", err)
+				continue
+			}
+
+			// Create the thread in database
+			// UUID is generated inside CreateRoom method
+			room, err := h.chatService.CreateRoom(createData.Title, "", false, user.ID)
+			if err != nil {
+				log.Printf("Error creating room: %v", err)
+
+				// Send error response
+				errResp := ServerResponse{
+					Type:    "thread_created",
+					Success: false,
+					Message: "Failed to create thread",
+				}
+				errRespBytes, _ := json.Marshal(errResp)
+				client.Send <- errRespBytes
+				continue
+			}
+
+			// Send response with the new thread ID
+			response := ServerResponse{
+				Type:     "thread_created",
+				Success:  true,
+				ThreadID: room.ID,
+				RoomID:   room.ID, // Same as thread ID in this case
+				Data:     json.RawMessage(fmt.Sprintf(`{"title":"%s"}`, createData.Title)),
+			}
+
+			responseBytes, _ := json.Marshal(response)
+			client.Send <- responseBytes
+
 		case "subscribe":
 			// Handle room subscription
 			if clientMsg.RoomID == "" {
@@ -229,6 +280,16 @@ func (h *WSHandler) handleMessages(client *websocket.Client, user *model.User) {
 
 			respBytes, _ := json.Marshal(respMsg)
 
+			// Send confirmation back to the sender with the message ID
+			confirmMsg := ServerResponse{
+				Type:      "message_sent",
+				Success:   true,
+				RoomID:    clientMsg.RoomID,
+				MessageID: dbMsg.ID,
+			}
+			confirmBytes, _ := json.Marshal(confirmMsg)
+			client.Send <- confirmBytes
+
 			// Broadcast to all clients in the room
 			h.hub.Broadcast <- &websocket.Message{
 				RoomID: clientMsg.RoomID,
@@ -324,7 +385,7 @@ func (h *WSHandler) handleMessages(client *websocket.Client, user *model.User) {
 	}
 }
 
-// sendRoomHistory sends recent message history to a client
+// sendRoomHistory function for ws_handler.go
 func (h *WSHandler) sendRoomHistory(client *websocket.Client, roomID string) {
 	// Get recent messages for the room (e.g., last 50)
 	messages, err := h.chatService.GetRoomMessages(roomID, 50, 0)
@@ -333,25 +394,23 @@ func (h *WSHandler) sendRoomHistory(client *websocket.Client, roomID string) {
 		return
 	}
 
+	// Check if we have messages
+	if len(messages) == 0 {
+		return
+	}
+
 	// Reverse the order to send oldest first
 	for i := len(messages) - 1; i >= 0; i-- {
 		msg := messages[i]
 
-		// Get the user who sent this message
-		user, err := h.userService.GetByID(msg.UserID)
-		if err != nil {
-			log.Printf("Error fetching user: %v", err)
-			continue
-		}
-
-		// Create history message
+		// Create history message - now we can use msg.UserName directly
 		historyMsg := websocket.Message{
 			Type:      "message",
 			RoomID:    roomID,
 			UserID:    msg.UserID,
 			Content:   msg.Content,
 			Timestamp: msg.CreatedAt,
-			Data:      json.RawMessage(fmt.Sprintf(`{"id":"%s","user_name":"%s","history":true}`, msg.ID, user.Name)),
+			Data:      json.RawMessage(fmt.Sprintf(`{"id":"%s","user_name":"%s","history":true}`, msg.ID, msg.UserName)),
 		}
 
 		historyBytes, _ := json.Marshal(historyMsg)

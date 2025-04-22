@@ -104,7 +104,7 @@ func (s *ChatService) SendMessage(roomID, userID, content string) (*model.Messag
 	// Publish message to Redis for real-time delivery
 	ctx := s.redisClient.Context()
 
-	messageData, err := json.Marshal(map[string]interface{}{
+	messageData, err := json.Marshal(map[string]any{
 		"id":        message.ID,
 		"room_id":   message.RoomID,
 		"user_id":   message.UserID,
@@ -122,7 +122,8 @@ func (s *ChatService) SendMessage(roomID, userID, content string) (*model.Messag
 }
 
 // GetRoomMessages gets messages from a room with pagination
-func (s *ChatService) GetRoomMessages(roomID string, limit, offset int) ([]*model.Message, error) {
+// Updated to return MessageDTO with user information
+func (s *ChatService) GetRoomMessages(roomID string, limit, offset int) ([]*model.MessageDTO, error) {
 	return s.pgMessage.FindByRoomID(roomID, limit, offset)
 }
 
