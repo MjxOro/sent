@@ -1,12 +1,14 @@
 // src/app/api/auth/cookie/route.ts
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { jwtVerify } from "jose";
 import { cookies } from "next/headers";
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
     // Get cookies from the request
     const access_token = (await cookies()).get("auth_token")?.value;
+    const { searchParams } = new URL(request.url);
+    const purpose = searchParams.get("purpose");
 
     // Get the auth_token cookie
 
@@ -42,6 +44,9 @@ export async function GET() {
       ...payload, // Include other fields
     };
 
+    if (purpose === "ws") {
+      return NextResponse.json({ token: access_token });
+    }
     // Return authenticated response
     return NextResponse.json(
       {
