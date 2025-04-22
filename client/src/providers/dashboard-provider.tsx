@@ -28,7 +28,10 @@ export type DashboardContextType = {
   deleteThread: (threadId: string) => void;
   setSearchQuery: (query: string) => void;
   toggleThemeMode: () => void;
-  createNewThread: (title: string) => string;
+  createNewThread: (
+    title: string,
+    callback?: (threadId: string) => void,
+  ) => void;
 
   // WebSocket properties
   wsStatus: "connected" | "disconnected" | "connecting" | "error" | "idle";
@@ -118,6 +121,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (typeof window === "undefined" || !isInitialized) return;
 
+    // Connect to WebSocket
     connectWebSocket();
 
     return () => {

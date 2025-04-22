@@ -1,5 +1,3 @@
-"use client";
-
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
 
@@ -45,7 +43,7 @@ type ConnectionStatus =
 // Standardized WebSocket message format
 interface WSMessage {
   type: string;
-  room_id: string;
+  room_id?: string;
   content?: string;
   data?: any;
 }
@@ -64,6 +62,11 @@ export interface DashboardState {
   messages: Message[];
   isLoadingMessages: boolean;
   messagesError: string | null;
+  pendingThreadCreation: {
+    title: string;
+    pendingMessages: string[];
+    callback?: (threadId: string) => void;
+  } | null;
   activeRooms: Set<string>; // Track which rooms we're subscribed to
   typingUsers: Record<
     string,
@@ -77,10 +80,16 @@ export interface DashboardState {
   deleteThread: (threadId: string) => void;
   setSearchQuery: (query: string) => void;
   toggleThemeMode: () => void;
-  createNewThread: (title: string) => string;
+  createNewThread: (
+    title: string,
+    callback?: (threadId: string) => void,
+  ) => void;
+
+  // Thread management
+  addThread: (threadId: string, title: string) => void;
 
   // WebSocket Actions
-  connectWebSocket: (roomId: any) => void;
+  connectWebSocket: () => void;
   disconnectWebSocket: () => void;
   subscribeToRoom: (roomId: string) => void;
   unsubscribeFromRoom: (roomId: string) => void;
@@ -149,6 +158,7 @@ export const useDashboardStore = create<DashboardState>()(
       messages: [],
       isLoadingMessages: false,
       messagesError: null,
+      pendingThreadCreation: null,
       activeRooms: new Set<string>(),
       typingUsers: {},
 
@@ -212,8 +222,53 @@ export const useDashboardStore = create<DashboardState>()(
           themeMode: state.themeMode === "dark" ? "light" : "dark",
         })),
 
-      createNewThread: (title) => {
-        const id = `thread-${Date.now()}`;
+      // Modified to request a UUID from the server
+      createNewThread: (title, callback) => {
+        const { instance, status } = get().wsConnection;
+
+        if (!title) {
+          title = "New Chat";
+        }
+
+        // If WebSocket is connected, send thread creation request
+        if (instance && status === "connected") {
+          const message: WSMessage = {
+            type: "create_thread",
+            data: { title },
+          };
+
+          instance.send(JSON.stringify(message));
+
+          // Store pending state
+          set({
+            pendingThreadCreation: {
+              title,
+              pendingMessages: [],
+              callback,
+            },
+          });
+        } else {
+          // For fallback or testing, create a placeholder with temporary ID
+          console.error("WebSocket not connected. Thread creation might fail.");
+
+          // Store in pending state and try to reconnect WebSocket
+          set({
+            pendingThreadCreation: {
+              title,
+              pendingMessages: [],
+              callback,
+            },
+          });
+
+          // Try to connect WebSocket
+          get().connectWebSocket();
+        }
+      },
+
+      // New method to add a thread with server-generated ID
+      addThread: (threadId, title) => {
+        const pendingState = get().pendingThreadCreation;
+
         set((state) => {
           // Add the new thread to the recent group
           const updatedRecentGroup = state.threads.find(
@@ -222,7 +277,7 @@ export const useDashboardStore = create<DashboardState>()(
 
           if (updatedRecentGroup) {
             const newThread = {
-              id,
+              id: threadId,
               title: title || "New Chat",
               lastUpdated: new Date(),
               messages: [],
@@ -237,36 +292,58 @@ export const useDashboardStore = create<DashboardState>()(
                 : group,
             );
 
+            // Update state with the new thread
             set({
               threads: newThreads,
-              currentThreadId: id,
+              currentThreadId: threadId,
               messages: [],
+              pendingThreadCreation: null,
             });
 
             // Subscribe to the new room if we're connected
             const { status } = get().wsConnection;
             if (status === "connected") {
-              get().subscribeToRoom(id);
+              get().subscribeToRoom(threadId);
+            }
+
+            // Send any pending messages for this thread
+            if (pendingState?.pendingMessages.length) {
+              pendingState.pendingMessages.forEach((content) => {
+                // Queue a short delay to make sure subscription completes
+                setTimeout(() => {
+                  const message: WSMessage = {
+                    type: "message",
+                    room_id: threadId,
+                    content: content,
+                  };
+
+                  const { instance } = get().wsConnection;
+                  if (instance) {
+                    instance.send(JSON.stringify(message));
+                  }
+                }, 100);
+              });
+            }
+
+            // Execute callback if provided
+            if (pendingState?.callback) {
+              pendingState.callback(threadId);
             }
           }
 
           return {};
         });
-
-        return id;
       },
 
       // WebSocket Actions
-      // Updated connectWebSocket function for dashboardStore.ts
-
-      connectWebSocket: async (roomId: any) => {
+      connectWebSocket: async () => {
         // Disconnect existing connection if any
         get().disconnectWebSocket();
 
         set({ wsConnection: { status: "connecting", instance: null } });
 
         try {
-          // Get token from existing API endpoint with 'ws' purpose
+          // Get token from API endpoint
           const response = await fetch("/api/auth/cookie?purpose=ws");
 
           if (!response.ok) {
@@ -275,7 +352,6 @@ export const useDashboardStore = create<DashboardState>()(
 
           const data = await response.json();
           const token = data.token;
-
           if (!token) {
             set({ wsConnection: { status: "error", instance: null } });
             console.error("Cannot connect to WebSocket: No auth token found");
@@ -283,19 +359,33 @@ export const useDashboardStore = create<DashboardState>()(
           }
 
           // Connect to WebSocket with the token
-          const wsUrl = `${process.env.NEXT_PUBLIC_WS_URL || "ws://backend:8080"}/api/ws/room/${roomId}?token=${token}`;
+          const wsUrl = `${process.env.NEXT_PUBLIC_WS_URL || "ws://localhost:8080"}/api/ws?token=${token}`;
           const ws = new WebSocket(wsUrl);
 
           ws.onopen = () => {
             set({ wsConnection: { status: "connected", instance: ws } });
-            console.log(`Connected to WebSocket for room ${roomId}, nya~!`);
+            console.log("Connected to WebSocket, nya~!");
+
+            // If we have a pending thread creation, send it now
+            const pendingThread = get().pendingThreadCreation;
+            if (pendingThread) {
+              const message: WSMessage = {
+                type: "create_thread",
+                data: { title: pendingThread.title },
+              };
+              ws.send(JSON.stringify(message));
+            }
+
+            // If we have a current thread, subscribe to it
+            const currentThreadId = get().currentThreadId;
+            if (currentThreadId) {
+              get().subscribeToRoom(currentThreadId);
+            }
           };
 
           ws.onclose = () => {
             set({ wsConnection: { status: "disconnected", instance: null } });
-            console.log(
-              `Disconnected from WebSocket for room ${roomId}, meow!`,
-            );
+            console.log("Disconnected from WebSocket, meow!");
           };
 
           ws.onerror = (error) => {
@@ -308,18 +398,83 @@ export const useDashboardStore = create<DashboardState>()(
               const data = JSON.parse(event.data);
 
               // Handle different message types
-              if (data.type === "message") {
-                // Add the new message to our store
-                get().addMessage(data.payload);
+              switch (data.type) {
+                case "message":
+                  // Add received message
+                  get().addMessage(data);
+                  break;
+
+                case "message_sent":
+                  // Handle successful message send confirmation if needed
+                  break;
+
+                case "thread_created":
+                  // Handle successful thread creation
+                  if (data.success && data.thread_id) {
+                    // Add the new thread with server-generated ID
+                    const threadTitle =
+                      data.data?.title ||
+                      get().pendingThreadCreation?.title ||
+                      "New Chat";
+                    get().addThread(data.thread_id, threadTitle);
+                  } else {
+                    console.error("Failed to create thread:", data.message);
+                  }
+                  break;
+
+                case "typing":
+                  // Handle typing indicators
+                  if (data.room_id && data.user_id && data.data) {
+                    // Update typing users
+                    set((state) => {
+                      const roomTypers = state.typingUsers[data.room_id] || [];
+                      const typerIndex = roomTypers.findIndex(
+                        (t) => t.userId === data.user_id,
+                      );
+
+                      if (data.data.is_typing) {
+                        // Add or update typing user
+                        const typer = {
+                          userId: data.user_id,
+                          userName: data.data.user_name || "Unknown",
+                          timestamp: Date.now(),
+                        };
+
+                        if (typerIndex >= 0) {
+                          // Update existing
+                          roomTypers[typerIndex] = typer;
+                        } else {
+                          // Add new
+                          roomTypers.push(typer);
+                        }
+                      } else if (typerIndex >= 0) {
+                        // Remove typing user
+                        roomTypers.splice(typerIndex, 1);
+                      }
+
+                      return {
+                        typingUsers: {
+                          ...state.typingUsers,
+                          [data.room_id]: roomTypers,
+                        },
+                      };
+                    });
+                  }
+                  break;
+
+                default:
+                  console.log("Unhandled message type:", data.type);
               }
-              // Handle other message types like typing indicators, etc.
             } catch (error) {
               console.error("Failed to parse WebSocket message:", error);
             }
           };
+
+          // Store websocket instance
+          set({ wsConnection: { status: "connecting", instance: ws } });
         } catch (error) {
           set({ wsConnection: { status: "error", instance: null } });
-          console.error("Error getting auth token:", error);
+          console.error("Error connecting to WebSocket:", error);
         }
       },
 
@@ -387,7 +542,36 @@ export const useDashboardStore = create<DashboardState>()(
         const { instance, status } = get().wsConnection;
         const currentThreadId = get().currentThreadId;
 
-        if (!content.trim() || !currentThreadId) return;
+        if (!content.trim()) return;
+
+        // If we don't have a current thread, we need to create one first
+        if (!currentThreadId) {
+          // Store the message to send after thread creation
+          const title =
+            content.length > 30 ? content.substring(0, 27) + "..." : content;
+
+          // Update pending thread creation with this message
+          set({
+            pendingThreadCreation: {
+              title,
+              pendingMessages: [content.trim()],
+              callback: undefined,
+            },
+          });
+          // Request thread creation
+          const { instance, status } = get().wsConnection;
+          if (instance && status === "connected") {
+            const message: WSMessage = {
+              type: "create_thread",
+              data: { title },
+            };
+            instance.send(JSON.stringify(message));
+          } else {
+            // Try to connect if not connected
+            get().connectWebSocket();
+          }
+          return;
+        }
 
         // Create a standardized message
         const message: WSMessage = {
@@ -400,30 +584,20 @@ export const useDashboardStore = create<DashboardState>()(
         if (instance && status === "connected") {
           instance.send(JSON.stringify(message));
         } else {
-          // Otherwise, use the REST API as fallback
-          // This code would be browser-side only
-          if (typeof window !== "undefined") {
-            fetch(`/api/chat/${currentThreadId}`, {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-                Authorization: `Bearer ${localStorage.getItem("accessToken")}`,
-              },
-              body: JSON.stringify({ content: content.trim() }),
-            })
-              .then((response) => {
-                if (!response.ok) throw new Error("Failed to send message");
-                return response.json();
-              })
-              .then((data) => {
-                // Add the sent message to our local store
-                get().addMessage(data);
-              })
-              .catch((error) => {
-                console.error("Error sending message:", error);
-                // Attempt to reconnect WebSocket
-                get().connectWebSocket();
-              });
+          // Otherwise, use the REST API as fallback or try to reconnect
+          console.error(
+            "WebSocket not connected. Message might not be delivered.",
+          );
+
+          // Try to reconnect
+          get().connectWebSocket();
+
+          // For now, store in pending messages if there's a currentThreadId
+          if (currentThreadId) {
+            // We could implement a message queue here for offline support
+            console.log(
+              "Message queued for delivery when connection is restored",
+            );
           }
         }
       },
