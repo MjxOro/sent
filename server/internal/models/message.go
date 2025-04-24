@@ -1,5 +1,5 @@
 // internal/models/message.go
-package model
+package models
 
 import "time"
 

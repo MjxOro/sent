@@ -1,5 +1,5 @@
 // Add a type field to the Room model
-package model
+package models
 
 import "time"
 
