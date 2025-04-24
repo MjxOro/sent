@@ -4,13 +4,14 @@ import { useState, useRef, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
-import { useDashboard } from "@/providers/dashboard-provider";
+import { useChat } from "@/providers/dashboard-provider";
 
 type DashboardProps = {
   initialChatId?: string;
   initialMessages?: any[];
   chatDetails?: any;
 };
+
 const Dashboard: React.FC<DashboardProps> = ({
   initialChatId,
   initialMessages = [],
@@ -18,83 +19,42 @@ const Dashboard: React.FC<DashboardProps> = ({
 }) => {
   const router = useRouter();
 
-  // Access state from context
+  // Use our new hook to access all chat state
   const {
+    // UI state
     sidebarOpen,
     toggleSidebar,
-    threads,
-    currentThreadId,
-    searchQuery,
-    setSearchQuery,
     themeMode,
     toggleThemeMode,
+    searchQuery,
+    setSearchQuery,
+
+    // Thread state
+    threads,
+    currentThreadId,
     setCurrentThread,
+    createThread,
     pinThread,
     deleteThread,
-    createNewThread,
 
-    // WebSocket properties
-    wsStatus,
+    // Message state
     messages,
     isLoadingMessages,
     messagesError,
-    typingUsers,
-
-    // WebSocket methods
     sendMessage,
-    sendTypingIndicator,
     loadMoreMessages,
-  } = useDashboard();
+
+    // WebSocket state
+    wsStatus,
+    typingUsers,
+    sendTypingIndicator,
+  } = useChat();
 
   // Local state
   const [message, setMessage] = useState("");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
-  // Handle initial props for SSR data
-  useEffect(() => {
-    if (initialChatId && initialChatId !== currentThreadId) {
-      // Set current thread
-      setCurrentThread(initialChatId);
-
-      // Update thread title if we have chat details
-      if (chatDetails && chatDetails.name) {
-        // Find the thread and update its title
-        const updatedThreads = threads.map((group) => ({
-          ...group,
-          threads: group.threads.map((thread) =>
-            thread.id === initialChatId
-              ? { ...thread, title: chatDetails.name }
-              : thread,
-          ),
-        }));
-
-        // You would need to add a method to your store to update threads
-        // For now, we'll assume your store has this capability
-      }
-
-      // Initialize messages if provided
-      if (initialMessages && initialMessages.length > 0) {
-        // Set initial messages in store
-        // You might need to format these messages to match your expected format
-        const formattedMessages = initialMessages.map((msg) => ({
-          ...msg,
-          formatted: {
-            role:
-              msg.user_id === "system"
-                ? "system"
-                : msg.user_id === localStorage.getItem("userId")
-                  ? "user"
-                  : "assistant",
-            timestamp: new Date(msg.created_at || msg.timestamp),
-          },
-        }));
-
-        // Set messages directly
-        // This would require adding a method to your store if not already present
-      }
-    }
-  }, [initialChatId, initialMessages, chatDetails]);
 
   // Auto resize textarea based on content
   useEffect(() => {
@@ -125,14 +85,15 @@ const Dashboard: React.FC<DashboardProps> = ({
     e.preventDefault();
     if (!message.trim()) return;
 
-    // Create a new thread if none is selected
+    // Create a new thread if none is selected or send message to current thread
     if (!currentThreadId) {
       const title =
         message.length > 30 ? message.substring(0, 27) + "..." : message;
 
-      const newThreadId = createNewThread(title);
-      sendMessage(message);
-      router.push(`/chat/${newThreadId}`);
+      createThread(title).then((newThreadId) => {
+        sendMessage(message);
+        router.push(`/chat/${newThreadId}`);
+      });
     } else {
       sendMessage(message);
     }
@@ -259,8 +220,9 @@ const Dashboard: React.FC<DashboardProps> = ({
               className="flex items-center justify-center w-full py-2 px-4 bg-pink-600 hover:bg-pink-700 text-white rounded-lg"
               onClick={(e) => {
                 e.preventDefault();
-                const id = createNewThread("New Chat");
-                router.push(`/chat/${id}`);
+                createThread("New Chat").then((id) => {
+                  router.push(`/chat/${id}`);
+                });
               }}
             >
               <span>New Chat</span>
@@ -301,6 +263,11 @@ const Dashboard: React.FC<DashboardProps> = ({
                       >
                         <span className="truncate text-sm dark:text-gray-300">
                           {thread.title}
+                          {thread.unreadCount ? (
+                            <span className="ml-2 bg-pink-600 text-white text-xs px-1.5 py-0.5 rounded-full">
+                              {thread.unreadCount}
+                            </span>
+                          ) : null}
                         </span>
 
                         {/* Thread Actions - Show on hover */}
@@ -453,7 +420,7 @@ const Dashboard: React.FC<DashboardProps> = ({
                   className="max-w-md w-full text-center space-y-6"
                 >
                   <h2 className="text-2xl font-bold dark:text-gray-200">
-                    Meow! How can Cat help you today?
+                    How can I help you today?
                   </h2>
 
                   {/* Suggestion Buttons */}
@@ -522,7 +489,8 @@ const Dashboard: React.FC<DashboardProps> = ({
                       >
                         <p>{msg.content}</p>
                         <div className="mt-1 text-xs opacity-70">
-                          {msg.formatted?.timestamp.toLocaleTimeString()}
+                          {msg.formatted?.timestamp?.toLocaleTimeString() ||
+                            new Date(msg.created_at).toLocaleTimeString()}
                         </div>
                       </div>
                     </motion.div>
@@ -598,7 +566,7 @@ const Dashboard: React.FC<DashboardProps> = ({
               </div>
 
               <div className="flex items-center text-xs text-gray-500 dark:text-gray-400">
-                <span>Meow Mini</span>
+                <span>Chat Mini</span>
                 <span className="ml-1">🔽</span>
               </div>
             </form>
