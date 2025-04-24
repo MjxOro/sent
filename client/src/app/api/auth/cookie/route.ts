@@ -44,7 +44,7 @@ export async function GET(request: NextRequest) {
       ...payload, // Include other fields
     };
 
-    if (purpose === "ws") {
+    if (purpose === "token") {
       return NextResponse.json({ token: access_token });
     }
     // Return authenticated response
