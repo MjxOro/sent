@@ -2,9 +2,8 @@
 package postgres
 
 import (
-	"time"
-
 	"github.com/mjxoro/sent/server/internal/models"
+	"time"
 )
 
 // Message handles database operations for messages
@@ -20,7 +19,7 @@ func NewMessage(db *DB) *Message {
 }
 
 // Create creates a new message
-func (r *Message) Create(message *model.Message) error {
+func (r *Message) Create(message *models.Message) error {
 	query := `
 		INSERT INTO messages (room_id, user_id, content, created_at, updated_at)
 		VALUES ($1, $2, $3, $4, $5)
@@ -43,7 +42,7 @@ func (r *Message) Create(message *model.Message) error {
 
 // FindByRoomID finds messages in a room with pagination
 // Now returns MessageDTO with user information
-func (r *Message) FindByRoomID(roomID string, limit, offset int) ([]*model.MessageDTO, error) {
+func (r *Message) FindByRoomID(roomID string, limit, offset int) ([]*models.MessageDTO, error) {
 	query := `
 		SELECT m.id, m.room_id, m.user_id, m.content, m.created_at, m.updated_at,
 		       u.name as user_name, u.avatar as user_avatar
@@ -54,7 +53,7 @@ func (r *Message) FindByRoomID(roomID string, limit, offset int) ([]*model.Messa
 		LIMIT $2 OFFSET $3
 	`
 
-	var messages []*model.MessageDTO
+	var messages []*models.MessageDTO
 	err := r.db.Select(&messages, query, roomID, limit, offset)
 	if err != nil {
 		return nil, err
@@ -64,10 +63,10 @@ func (r *Message) FindByRoomID(roomID string, limit, offset int) ([]*model.Messa
 }
 
 // FindByID finds a message by ID
-func (r *Message) FindByID(id string) (*model.Message, error) {
+func (r *Message) FindByID(id string) (*models.Message, error) {
 	query := `SELECT * FROM messages WHERE id = $1`
 
-	var message model.Message
+	var message models.Message
 	err := r.db.Get(&message, query, id)
 	if err != nil {
 		return nil, err

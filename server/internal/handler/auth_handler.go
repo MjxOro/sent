@@ -81,7 +81,7 @@ func (h *AuthHandler) Callback(c *gin.Context) {
 	}
 
 	// Check if user exists and create if not
-	user, err := h.userService.FindOrCreateFromOAuth(&model.User{
+	user, err := h.userService.FindOrCreateFromOAuth(&models.User{
 		OAuthID: userInfo.ID,
 		Email:   userInfo.Email,
 		Name:    userInfo.Name,

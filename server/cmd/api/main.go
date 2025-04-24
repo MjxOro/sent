@@ -63,7 +63,7 @@ func main() {
 
 	// Initialize handlers
 	authHandler := handler.NewAuthHandler(oauthService, jwtService, userService, refreshTokenService)
-	wsHandler := handler.NewWSHandler(hub, chatService, userService)
+	wsHandler := handler.NewWSHandler(hub, chatService, userService, jwtService)
 
 	// Set Gin mode
 	if os.Getenv("GIN_MODE") == "release" {
@@ -187,6 +187,27 @@ func main() {
 			// WebSocket endpoint - Single connection for all rooms
 			protected.GET("/ws", wsHandler.HandleConnection)
 		}
+		protected.GET("/rooms/:roomId", func(c *gin.Context) {
+			userID := c.GetString("userID")
+			roomID := c.Param("roomId")
+
+			// Get room details
+			room, err := chatService.GetRoomDetails(roomID)
+			if err != nil {
+				c.JSON(404, gin.H{"error": "room not found"})
+				return
+			}
+
+			// Check if user is a member of the room
+			isMember, err := chatService.IsUserMemberOfRoom(userID, roomID)
+			if err != nil || !isMember {
+				c.JSON(403, gin.H{"error": "access denied"})
+				return
+			}
+
+			// Return room details
+			c.JSON(200, room)
+		})
 	}
 
 	// Start server

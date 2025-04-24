@@ -10,6 +10,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	gorillaWs "github.com/gorilla/websocket"
+	"github.com/mjxoro/sent/server/internal/auth"
 	"github.com/mjxoro/sent/server/internal/models"
 	"github.com/mjxoro/sent/server/internal/service"
 	"github.com/mjxoro/sent/server/pkg/websocket"
@@ -20,6 +21,7 @@ type WSHandler struct {
 	hub         *websocket.Hub
 	chatService *service.ChatService
 	userService *service.UserService
+	jwtService  *auth.JWTService
 }
 
 // NewWSHandler creates a new WebSocket handler
@@ -27,11 +29,13 @@ func NewWSHandler(
 	hub *websocket.Hub,
 	chatService *service.ChatService,
 	userService *service.UserService,
+	jwtService *auth.JWTService,
 ) *WSHandler {
 	return &WSHandler{
 		hub:         hub,
 		chatService: chatService,
 		userService: userService,
+		jwtService:  jwtService,
 	}
 }
 
@@ -56,15 +60,16 @@ type ServerResponse struct {
 
 // HandleConnection handles WebSocket connections
 func (h *WSHandler) HandleConnection(c *gin.Context) {
-	userID := c.GetString("userID")
-	if userID == "" {
-		// Fall back to query parameter for testing
-		userID = c.Query("user_id")
-		if userID == "" {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
-			return
-		}
+	// Grab token from params
+	token := c.Query("token")
+	if token == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
 	}
+
+	// Validate Token then decode to get user id
+
+	claims, err := h.jwtService.ValidateToken(token)
+	userID := claims.UserID
 
 	// Get user info
 	user, err := h.userService.GetByID(userID)
@@ -98,7 +103,7 @@ func (h *WSHandler) HandleConnection(c *gin.Context) {
 }
 
 // handleMessages handles incoming messages from a client
-func (h *WSHandler) handleMessages(client *websocket.Client, user *model.User) {
+func (h *WSHandler) handleMessages(client *websocket.Client, user *models.User) {
 	defer func() {
 		h.hub.Unregister <- client
 		client.Conn.Close()
@@ -385,7 +390,7 @@ func (h *WSHandler) handleMessages(client *websocket.Client, user *model.User) {
 	}
 }
 
-// sendRoomHistory function for ws_handler.go
+// sendRoomHistory sends recent message history to a new client
 func (h *WSHandler) sendRoomHistory(client *websocket.Client, roomID string) {
 	// Get recent messages for the room (e.g., last 50)
 	messages, err := h.chatService.GetRoomMessages(roomID, 50, 0)
