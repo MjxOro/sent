@@ -6,109 +6,195 @@ import {
   useEffect,
   useState,
   ReactNode,
+  useCallback,
 } from "react";
-import {
-  useDashboardStore,
-  Thread,
-  ThreadGroup,
-  Message,
-} from "@/stores/dashboardStore";
 import { usePathname } from "next/navigation";
 
-// Create a context for dashboard with proper types
-export type DashboardContextType = {
+// Import all stores
+import { useUIStore } from "@/stores/dashboardUIStore";
+import { useThreadStore, ThreadGroup, Thread } from "@/stores/threadStore";
+import { useMessageStore, Message } from "@/stores/messageStore";
+import {
+  useSocketStore,
+  ConnectionStatus,
+  TypingUser,
+} from "@/stores/websocketStore";
+
+// Define the chat context with all the properties and methods we want to expose
+interface ChatContextType {
+  // UI state
   sidebarOpen: boolean;
+  themeMode: "light" | "dark";
+  searchQuery: string;
+  toggleSidebar: () => void;
+  toggleThemeMode: () => void;
+  setSearchQuery: (query: string) => void;
+
+  // Thread state
   threads: ThreadGroup[];
   currentThreadId: string | null;
-  searchQuery: string;
-  themeMode: "light" | "dark";
-  toggleSidebar: () => void;
   setCurrentThread: (threadId: string) => void;
-  pinThread: (threadId: string) => void;
+  createThread: (title: string) => Promise<string>;
   deleteThread: (threadId: string) => void;
-  setSearchQuery: (query: string) => void;
-  toggleThemeMode: () => void;
-  createNewThread: (
-    title: string,
-    callback?: (threadId: string) => void,
-  ) => void;
+  pinThread: (threadId: string) => void;
 
-  // WebSocket properties
-  wsStatus: "connected" | "disconnected" | "connecting" | "error" | "idle";
+  // Message state
   messages: Message[];
   isLoadingMessages: boolean;
   messagesError: string | null;
-  typingUsers: Record<
-    string,
-    { userId: string; userName: string; timestamp: number }[]
-  >;
-
-  // WebSocket methods
   sendMessage: (content: string) => void;
-  sendTypingIndicator: (isTyping: boolean) => void;
-  markMessagesAsRead: (messageIds: string[]) => void;
   loadMoreMessages: () => Promise<void>;
-};
 
-const DashboardContext = createContext<DashboardContextType | undefined>(
-  undefined,
-);
+  // WebSocket state
+  wsStatus: ConnectionStatus;
+  typingUsers: Record<string, TypingUser[]>;
+  sendTypingIndicator: (isTyping: boolean) => void;
+}
 
-// Provider component
+// Create the context
+const ChatContext = createContext<ChatContextType | undefined>(undefined);
+
+// Provider component that wraps the app
 export function DashboardProvider({ children }: { children: ReactNode }) {
-  const {
-    // UI state
-    sidebarOpen,
-    threads,
-    currentThreadId,
-    searchQuery,
-    themeMode,
-
-    // UI actions
-    toggleSidebar,
-    setCurrentThread,
-    pinThread,
-    deleteThread,
-    setSearchQuery,
-    toggleThemeMode,
-    createNewThread,
-
-    // WebSocket & Messages state
-    wsConnection,
-    messages,
-    isLoadingMessages,
-    messagesError,
-    typingUsers,
-
-    // WebSocket & Messages actions
-    connectWebSocket,
-    disconnectWebSocket,
-    sendMessage,
-    sendTypingIndicator,
-    markMessagesAsRead,
-    loadMoreMessages,
-  } = useDashboardStore();
-
   const [isInitialized, setIsInitialized] = useState(false);
   const pathname = usePathname();
 
+  // Get UI state from store
+  const {
+    sidebarOpen,
+    themeMode,
+    searchQuery,
+    toggleSidebar,
+    toggleThemeMode,
+    setSearchQuery,
+  } = useUIStore();
+
+  // Get thread state from store
+  const {
+    threadGroups,
+    currentThreadId,
+    setCurrentThread: setCurrentThreadOriginal,
+    createThread: createThreadOriginal,
+    deleteThread,
+    pinThread,
+    threadsLoaded,
+    loadThreads,
+  } = useThreadStore();
+
+  // Get message state from store
+  const {
+    messages: allMessages,
+    messageLoadInfo,
+    loadMessages,
+    loadMoreMessages,
+  } = useMessageStore();
+
+  // Get socket state from store
+  const {
+    status: wsStatus,
+    typingUsers,
+    connect: connectWebSocket,
+    disconnect: disconnectWebSocket,
+    subscribeToRoom,
+    unsubscribeFromRoom,
+    sendMessage: sendMessageOriginal,
+    sendTypingIndicator: sendTypingIndicatorOriginal,
+    _cleanupStaleTypingIndicators,
+  } = useSocketStore();
+
+  // Wrap some functions to simplify the API
+  const setCurrentThread = useCallback(
+    (threadId: string) => {
+      if (currentThreadId) {
+        unsubscribeFromRoom(currentThreadId);
+      }
+      setCurrentThreadOriginal(threadId);
+      subscribeToRoom(threadId);
+    },
+    [
+      currentThreadId,
+      setCurrentThreadOriginal,
+      subscribeToRoom,
+      unsubscribeFromRoom,
+    ],
+  );
+
+  const createThread = useCallback(
+    async (title: string) => {
+      const threadId = await createThreadOriginal(title);
+      setCurrentThread(threadId);
+      return threadId;
+    },
+    [createThreadOriginal, setCurrentThread],
+  );
+
+  const sendMessage = useCallback(
+    (content: string) => {
+      sendMessageOriginal(currentThreadId, content);
+    },
+    [currentThreadId, sendMessageOriginal],
+  );
+
+  const sendTypingIndicator = useCallback(
+    (isTyping: boolean) => {
+      if (currentThreadId) {
+        sendTypingIndicatorOriginal(currentThreadId, isTyping);
+      }
+    },
+    [currentThreadId, sendTypingIndicatorOriginal],
+  );
+
+  // Get current thread messages
+  const messages = currentThreadId ? allMessages[currentThreadId] || [] : [];
+  const currentThreadInfo = currentThreadId
+    ? messageLoadInfo[currentThreadId]
+    : null;
+  const isLoadingMessages = currentThreadInfo?.isLoading || false;
+  const messagesError = currentThreadInfo?.error || null;
+
+  // Get typing users for current thread
+  const currentThreadTypingUsers = currentThreadId
+    ? typingUsers[currentThreadId] || []
+    : [];
+
+  // Initialize app state on client-side only
+  useEffect(() => {
+    if (typeof window !== "undefined" && !isInitialized) {
+      setIsInitialized(true);
+
+      const initializeApp = async () => {
+        // Load threads if not already loaded
+        if (!threadsLoaded) {
+          await loadThreads();
+        }
+
+        // Connect to WebSocket using your auth approach
+        await connectWebSocket();
+      };
+
+      initializeApp();
+
+      return () => {
+        disconnectWebSocket();
+      };
+    }
+  }, [
+    isInitialized,
+    threadsLoaded,
+    loadThreads,
+    connectWebSocket,
+    disconnectWebSocket,
+  ]);
+
   // Extract thread ID from pathname if available
   useEffect(() => {
-    if (pathname?.startsWith("/chat/")) {
+    if (pathname?.startsWith("/chat/") && isInitialized) {
       const threadId = pathname.replace("/chat/", "");
       if (threadId && threadId !== currentThreadId) {
         setCurrentThread(threadId);
       }
     }
-  }, [pathname, currentThreadId, setCurrentThread]);
-
-  // Initialize dashboard state on client-side only
-  useEffect(() => {
-    if (typeof window !== "undefined") {
-      // Any initialization logic can go here
-      setIsInitialized(true);
-    }
-  }, []);
+  }, [pathname, currentThreadId, setCurrentThread, isInitialized]);
 
   // Apply theme mode effect
   useEffect(() => {
@@ -117,19 +203,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
     }
   }, [themeMode]);
 
-  // Initialize WebSocket connection on mount
-  useEffect(() => {
-    if (typeof window === "undefined" || !isInitialized) return;
-
-    // Connect to WebSocket
-    connectWebSocket();
-
-    return () => {
-      disconnectWebSocket();
-    };
-  }, [isInitialized, connectWebSocket, disconnectWebSocket]);
-
-  // Auto-reconnect WebSocket on network connectivity changes
+  // Setup auto-reconnect on network changes
   useEffect(() => {
     if (typeof window === "undefined" || !isInitialized) return;
 
@@ -138,14 +212,8 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
     };
 
     const handleOffline = () => {
-      // We'll let the WebSocket naturally disconnect
-      // but we'll update the UI to show disconnected state
-      useDashboardStore.setState({
-        wsConnection: {
-          status: "disconnected",
-          instance: wsConnection.instance,
-        },
-      });
+      // Update UI to show disconnected state, but don't close the socket
+      // as it will auto-disconnect when offline
     };
 
     window.addEventListener("online", handleOnline);
@@ -155,89 +223,60 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
       window.removeEventListener("online", handleOnline);
       window.removeEventListener("offline", handleOffline);
     };
-  }, [isInitialized, connectWebSocket, wsConnection.instance]);
+  }, [isInitialized, connectWebSocket]);
 
-  // Setup typing indicator auto-clearing
+  // Setup typing indicator cleanup timer
   useEffect(() => {
-    if (typeof window === "undefined") return;
+    if (typeof window === "undefined" || !isInitialized) return;
 
-    // Set up a timer to regularly check for stale typing indicators
     const timer = setInterval(() => {
-      if (Object.keys(typingUsers).length > 0) {
-        const now = Date.now();
-        let hasChanges = false;
-
-        const updatedTypingUsers = { ...typingUsers };
-
-        // Check each room
-        Object.keys(updatedTypingUsers).forEach((roomId) => {
-          // Filter out typing indicators older than 3 seconds
-          const freshTypers = updatedTypingUsers[roomId].filter(
-            (user) => now - user.timestamp < 3000,
-          );
-
-          if (freshTypers.length !== updatedTypingUsers[roomId].length) {
-            hasChanges = true;
-
-            if (freshTypers.length === 0) {
-              delete updatedTypingUsers[roomId];
-            } else {
-              updatedTypingUsers[roomId] = freshTypers;
-            }
-          }
-        });
-
-        // Only update state if there were changes
-        if (hasChanges) {
-          useDashboardStore.setState({ typingUsers: updatedTypingUsers });
-        }
-      }
+      _cleanupStaleTypingIndicators();
     }, 1000);
 
     return () => clearInterval(timer);
-  }, [typingUsers]);
+  }, [isInitialized, _cleanupStaleTypingIndicators]);
 
-  // Create the context value
-  const contextValue: DashboardContextType = {
+  // Create context value to provide to components
+  const contextValue: ChatContextType = {
+    // UI state
     sidebarOpen,
-    threads,
-    currentThreadId,
-    searchQuery,
     themeMode,
+    searchQuery,
     toggleSidebar,
-    setCurrentThread,
-    pinThread,
-    deleteThread,
-    setSearchQuery,
     toggleThemeMode,
-    createNewThread,
+    setSearchQuery,
 
-    // WebSocket properties
-    wsStatus: wsConnection.status,
+    // Thread state
+    threads: threadGroups,
+    currentThreadId,
+    setCurrentThread,
+    createThread,
+    deleteThread,
+    pinThread,
+
+    // Message state
     messages,
     isLoadingMessages,
     messagesError,
-    typingUsers,
-
-    // WebSocket methods
     sendMessage,
+    loadMoreMessages: () => loadMoreMessages(currentThreadId || ""),
+
+    // WebSocket state
+    wsStatus,
+    typingUsers: { [currentThreadId || ""]: currentThreadTypingUsers },
     sendTypingIndicator,
-    markMessagesAsRead,
-    loadMoreMessages,
   };
 
   return (
-    <DashboardContext.Provider value={contextValue}>
-      {children}
-    </DashboardContext.Provider>
+    <ChatContext.Provider value={contextValue}>{children}</ChatContext.Provider>
   );
 }
 
-// Custom hook to use the dashboard context
-export function useDashboard() {
-  const context = useContext(DashboardContext);
+// Custom hook to use the chat context
+export function useChat() {
+  const context = useContext(ChatContext);
   if (context === undefined) {
-    throw new Error("useDashboard must be used within a DashboardProvider");
+    throw new Error("useChat must be used within a ChatProvider");
   }
   return context;
 }
