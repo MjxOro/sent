@@ -34,7 +34,7 @@ interface ChatContextType {
   threads: ThreadGroup[];
   currentThreadId: string | null;
   setCurrentThread: (threadId: string) => void;
-  createThread: (title: string) => Promise<string>;
+  createThread: (title: string, memberIds?: string[]) => Promise<string>;
   deleteThread: (threadId: string) => void;
   pinThread: (threadId: string) => void;
 
@@ -120,8 +120,8 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
   );
 
   const createThread = useCallback(
-    async (title: string) => {
-      const threadId = await createThreadOriginal(title);
+    async (title: string, memberIds: string[] = []) => {
+      const threadId = await createThreadOriginal(title, memberIds);
       setCurrentThread(threadId);
       return threadId;
     },
