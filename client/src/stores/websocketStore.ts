@@ -172,12 +172,19 @@ export const useSocketStore = create<SocketState>()((set, get) => ({
 
   // Message actions
   sendMessage: (roomId, content) => {
-    if (!content.trim()) return;
+    console.log(`Attempting to send message to room ${roomId}: ${content}`);
+
+    if (!content.trim()) {
+      console.log("Message is empty, not sending");
+      return;
+    }
 
     const { instance, status, pendingMessages } = get();
+    console.log(`WebSocket status: ${status}, instance exists: ${!!instance}`);
 
     // If we don't have a current room ID, we need to create a new thread first
     if (!roomId) {
+      console.log("No roomId provided, creating a new thread");
       const title =
         content.length > 30 ? content.substring(0, 27) + "..." : content;
 
@@ -186,6 +193,9 @@ export const useSocketStore = create<SocketState>()((set, get) => ({
         pendingThreadCreation: {
           title,
           callback: (newThreadId) => {
+            console.log(
+              `Thread created with ID: ${newThreadId}, now sending message`,
+            );
             // Send message once we have the thread ID
             get().sendMessage(newThreadId, content);
           },
@@ -198,30 +208,47 @@ export const useSocketStore = create<SocketState>()((set, get) => ({
     }
 
     // Create a standardized message
-    const message: ClientMessage = {
+    const message = {
       type: "message",
       room_id: roomId,
       content: content.trim(),
     };
 
+    console.log("Prepared message object:", message);
+
     // If WebSocket is connected, send through it
     if (instance && status === "connected") {
-      instance.send(JSON.stringify(message));
+      try {
+        console.log("Sending message via WebSocket...");
+        const messageString = JSON.stringify(message);
+        console.log("Stringified message:", messageString);
+        instance.send(messageString);
+        console.log("Message sent successfully");
+      } catch (err) {
+        console.error("Error sending message:", err);
+        // Queue message if sending fails
+        queueMessage(roomId, content.trim());
+      }
     } else {
-      // If not connected, queue message and try to reconnect
-      console.log("WebSocket not connected. Queueing message.");
+      console.log(
+        `WebSocket not connected (status: ${status}). Queueing message.`,
+      );
+      queueMessage(roomId, content.trim());
+      // Try to connect
+      get().connect();
+    }
 
+    // Helper function to queue messages
+    function queueMessage(roomId: string, content: string) {
       set((state) => {
         const updatedPendingMessages = { ...state.pendingMessages };
         if (!updatedPendingMessages[roomId]) {
           updatedPendingMessages[roomId] = [];
         }
-        updatedPendingMessages[roomId].push(content.trim());
+        updatedPendingMessages[roomId].push(content);
+        console.log(`Message queued for room ${roomId}`);
         return { pendingMessages: updatedPendingMessages };
       });
-
-      // Try to connect
-      get().connect();
     }
   },
 
