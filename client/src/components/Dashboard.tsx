@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { useChat } from "@/providers/dashboard-provider";
+import CreateChatModal from "@/components/Dashboard/CreateChatModal";
 
 type DashboardProps = {
   initialChatId?: string;
@@ -52,6 +53,7 @@ const Dashboard: React.FC<DashboardProps> = ({
 
   // Local state
   const [message, setMessage] = useState("");
+  const [isChatModalOpen, setIsChatModalOpen] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
@@ -220,9 +222,7 @@ const Dashboard: React.FC<DashboardProps> = ({
               className="flex items-center justify-center w-full py-2 px-4 bg-pink-600 hover:bg-pink-700 text-white rounded-lg"
               onClick={(e) => {
                 e.preventDefault();
-                createThread("New Chat").then((id) => {
-                  router.push(`/chat/${id}`);
-                });
+                setIsChatModalOpen(true);
               }}
             >
               <span>New Chat</span>
@@ -573,6 +573,19 @@ const Dashboard: React.FC<DashboardProps> = ({
           </div>
         </div>
       </div>
+
+      {/* Create Chat Modal */}
+      <CreateChatModal
+        isOpen={isChatModalOpen}
+        onClose={() => setIsChatModalOpen(false)}
+        onSubmit={(name, selectedFriends) => {
+          // Create the new room with members
+          createThread(name, selectedFriends).then((id) => {
+            router.push(`/chat/${id}`);
+            setIsChatModalOpen(false);
+          });
+        }}
+      />
     </div>
   );
 };
