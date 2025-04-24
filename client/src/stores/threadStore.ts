@@ -66,7 +66,7 @@ interface ThreadState {
   // Actions
   loadThreads: () => Promise<void>;
   setCurrentThread: (threadId: string) => void;
-  createThread: (title: string) => Promise<string>;
+  createThread: (title: string, memberIds?: string[]) => Promise<string>;
   deleteThread: (threadId: string) => Promise<void>;
   pinThread: (threadId: string) => void;
   updateThreadLastMessage: (threadId: string, message: Message) => void;
@@ -131,7 +131,9 @@ export const useThreadStore = create<ThreadState>()(
         set({ currentThreadId: threadId });
       },
 
-      createThread: async (title) => {
+      // Update the createThread function in client/src/stores/threadStore.ts
+
+      createThread: async (title, memberIds = []) => {
         try {
           // API call to create a new thread/room (using cookie auth approach)
           const response = await fetch("/api/rooms", {
@@ -143,6 +145,7 @@ export const useThreadStore = create<ThreadState>()(
               name: title,
               description: "",
               is_private: false,
+              member_ids: memberIds, // Add the member IDs
             }),
           });
 
