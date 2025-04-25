@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { useChat } from "@/providers/dashboard-provider";
+import { useAuth } from "@/providers/auth-provider";
 import CreateChatModal from "@/components/Dashboard/CreateChatModal";
 
 type DashboardProps = {
@@ -53,10 +54,12 @@ const Dashboard: React.FC<DashboardProps> = ({
 
   // Local state
   const [message, setMessage] = useState("");
+  const [hasLoadedMessages, setHasLoadedMessages] = useState(false);
   const [isChatModalOpen, setIsChatModalOpen] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
+  const { user } = useAuth();
 
   // Auto resize textarea based on content
   useEffect(() => {
@@ -80,6 +83,7 @@ const Dashboard: React.FC<DashboardProps> = ({
         messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
       }
     }
+    setHasLoadedMessages(true);
   }, [messages]);
 
   // Handle sending a message
@@ -384,9 +388,10 @@ const Dashboard: React.FC<DashboardProps> = ({
 
           {/* Messages Area */}
           <div
-            className="flex-1 overflow-y-auto p-4 bg-gray-50 dark:bg-gray-900"
+            className="flex-1 overflow-y-auto p-4 bg-gray-50 dark:bg-gray-900 flex flex-col"
             ref={messagesContainerRef}
             onScroll={handleScroll}
+            style={{ scrollbarWidth: "thin" }}
           >
             {isLoadingMessages && messages.length > 0 && (
               <div className="flex justify-center mb-4">
@@ -467,42 +472,68 @@ const Dashboard: React.FC<DashboardProps> = ({
                 </motion.div>
               </div>
             ) : (
-              <div className="space-y-6">
+              <div className="flex-grow flex flex-col justify-end space-y-6">
+                {/* Messages are already in chronological order, so render them as is */}
                 <AnimatePresence>
-                  {messages.map((msg) => (
-                    <motion.div
-                      key={msg.id}
-                      initial={{ opacity: 0, y: 10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0 }}
-                      transition={{ duration: 0.3 }}
-                      className={`flex ${msg.formatted?.role === "user" ? "justify-end" : "justify-start"}`}
-                    >
-                      <div
-                        className={`max-w-[80%] rounded-lg p-3 ${
-                          msg.formatted?.role === "user"
-                            ? "bg-pink-600 text-white"
-                            : msg.formatted?.role === "system"
-                              ? "bg-gray-300 dark:bg-gray-700 text-gray-800 dark:text-gray-200 text-xs italic"
-                              : "bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200"
-                        }`}
+                  {messages.map((msg) => {
+                    const isUser = msg.formatted?.role === "user";
+                    const isSystem = msg.formatted?.role === "system";
+                    const currentUser = msg.user_id;
+                    return (
+                      <motion.div
+                        key={msg.id}
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={
+                          hasLoadedMessages ? { opacity: 1, y: 0 } : undefined
+                        }
+                        exit={{ opacity: 0 }}
+                        transition={{ duration: 0.3 }}
+                        className={`flex w-full ${currentUser === user?.user_id ? "justify-end" : "justify-start"} mb-4`}
                       >
-                        <p>{msg.content}</p>
-                        <div className="mt-1 text-xs opacity-70">
-                          {msg.formatted?.timestamp?.toLocaleTimeString() ||
-                            new Date(msg.created_at).toLocaleTimeString()}
-                        </div>
-                      </div>
-                    </motion.div>
-                  ))}
-                </AnimatePresence>
+                        {/* Avatar for other users (not shown for user's own messages) */}
+                        {!isUser && !isSystem && !isUser && (
+                          <div className="w-8 h-8 rounded-full bg-gray-300 dark:bg-gray-600 flex items-center justify-center mr-2 flex-shrink-0">
+                            👤
+                          </div>
+                        )}
 
+                        <div
+                          className={`max-w-[75%] rounded-lg p-3 shadow-sm ${
+                            isUser
+                              ? "bg-pink-600 text-white rounded-tr-none"
+                              : isSystem
+                                ? "bg-gray-300 dark:bg-gray-700 text-gray-800 dark:text-gray-200 text-xs italic"
+                                : "bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 rounded-tl-none"
+                          }`}
+                        >
+                          <p className="whitespace-pre-wrap">{msg.content}</p>
+                          <div
+                            className={`mt-1 text-xs ${isUser ? "text-pink-100" : "text-gray-500 dark:text-gray-400"}`}
+                          >
+                            {msg.formatted?.timestamp?.toLocaleTimeString() ||
+                              new Date(msg.created_at).toLocaleTimeString()}
+                          </div>
+                        </div>
+
+                        {/* Avatar for user's own messages */}
+                        {!isUser && (
+                          <div className="w-8 h-8 rounded-full bg-pink-500 flex items-center justify-center ml-2 flex-shrink-0">
+                            😺
+                          </div>
+                        )}
+                      </motion.div>
+                    );
+                  })}
+                </AnimatePresence>
+                {/* Auto scroll spacer */}
+                <div className="pt-2" />{" "}
+                {/* Added for space at bottom of messages */}
                 {/* Typing indicator */}
                 {currentRoomTypingUsers.length > 0 && (
                   <motion.div
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
-                    className="flex justify-start"
+                    className="flex justify-start mt-auto"
                   >
                     <div className="flex items-center bg-gray-200 dark:bg-gray-700 rounded-lg p-2 text-xs text-gray-700 dark:text-gray-300">
                       <span>
@@ -524,7 +555,6 @@ const Dashboard: React.FC<DashboardProps> = ({
                     </div>
                   </motion.div>
                 )}
-
                 <div ref={messagesEndRef} />
               </div>
             )}
