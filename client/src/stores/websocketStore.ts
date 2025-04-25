@@ -1,4 +1,3 @@
-// src/stores/socketStore.ts
 import { create } from "zustand";
 import { useMessageStore } from "./messageStore";
 import { useThreadStore } from "./threadStore";
@@ -96,19 +95,78 @@ export const useSocketStore = create<SocketState>()((set, get) => ({
 
       const ws = new WebSocket(wsUrl);
 
-      // Setup WebSocket event handlers...
+      // Setup WebSocket event handlers
       ws.onopen = () => {
+        console.log("WebSocket connected!");
         set({ status: "connected", instance: ws });
-        console.log("Connected to WebSocket!");
 
-        // Handle reconnection logic
-        // Rest of your code...
+        // Reconnect to active rooms
+        const { activeRooms } = get();
+        activeRooms.forEach((roomId) => {
+          // Re-subscribe to each room
+          const message = {
+            type: "subscribe",
+            room_id: roomId,
+          };
+          ws.send(JSON.stringify(message));
+          console.log("Resubscribed to room:", roomId);
+        });
+
+        // Handle any pending messages
+        const { pendingMessages } = get();
+        Object.entries(pendingMessages).forEach(([roomId, messages]) => {
+          messages.forEach((content) => {
+            const message = {
+              type: "message",
+              room_id: roomId,
+              content,
+            };
+            ws.send(JSON.stringify(message));
+          });
+        });
+
+        // Clear pending messages
+        set({ pendingMessages: {} });
       };
 
-      // Other event handlers...
+      ws.onclose = (event) => {
+        console.log("WebSocket closed:", event.code, event.reason);
+
+        // Only set disconnected if we're not in error state (might be reconnecting)
+        if (get().status !== "error") {
+          set({ status: "disconnected", instance: null });
+        }
+
+        // Auto-reconnect unless this was a normal closure
+        if (event.code !== 1000) {
+          console.log(
+            "Abnormal close, attempting to reconnect in 5 seconds...",
+          );
+          setTimeout(() => {
+            console.log("Reconnecting to WebSocket...");
+            get().connect();
+          }, 5000);
+        }
+      };
+
+      ws.onerror = (error) => {
+        console.error("WebSocket error:", error);
+        set({ status: "error", instance: null });
+      };
+
+      ws.onmessage = (event) => {
+        console.log("WebSocket message received:", event.data);
+        get()._handleMessage(event);
+      };
     } catch (error) {
       set({ status: "error", instance: null });
       console.error("Error connecting to WebSocket:", error);
+
+      // Attempt to reconnect after 5 seconds
+      setTimeout(() => {
+        console.log("Attempting to reconnect after error...");
+        get().connect();
+      }, 5000);
     }
   },
 
@@ -224,6 +282,10 @@ export const useSocketStore = create<SocketState>()((set, get) => ({
         console.log("Stringified message:", messageString);
         instance.send(messageString);
         console.log("Message sent successfully");
+
+        // We don't add the message to the UI immediately anymore
+        // The server will send us back the message with an ID
+        // and it will be added to the UI at that point
       } catch (err) {
         console.error("Error sending message:", err);
         // Queue message if sending fails
@@ -305,17 +367,40 @@ export const useSocketStore = create<SocketState>()((set, get) => ({
 
   _handleMessage: (event) => {
     try {
+      console.log("Received WebSocket message:", event.data);
       const data = JSON.parse(event.data) as ServerMessage;
+      console.log("Parsed message:", data);
 
       // Handle different message types
       switch (data.type) {
         case "message":
+          // Validate all required fields exist
+          if (!data.id || !data.room_id || !data.content || !data.created_at) {
+            console.error("Received message missing required fields:", data);
+            return;
+          }
+
+          console.log("Adding message to store:", data);
           // Add received message to the store
           useMessageStore.getState().addMessage(data);
           break;
 
         case "message_sent":
-          // Handle message send confirmation if needed
+          // Handle message send confirmation
+          if (data.success && data.message_id && data.room_id) {
+            console.log("Message sent confirmation received:", data);
+
+            // Since messages are added by the server broadcast in the "message" case,
+            // we don't need to add a new message here. The server should broadcast
+            // the message to all clients (including the sender) after saving it.
+
+            // However, if you notice messages not appearing immediately after sending,
+            // you could fetch the latest messages for the room:
+            if (data.room_id) {
+              // Optionally refresh messages for this room
+              useMessageStore.getState().loadMessages(data.room_id, true);
+            }
+          }
           break;
 
         case "thread_created":
@@ -391,7 +476,7 @@ export const useSocketStore = create<SocketState>()((set, get) => ({
           console.log("Unhandled message type:", data.type);
       }
     } catch (error) {
-      console.error("Failed to parse WebSocket message:", error);
+      console.error("Failed to parse WebSocket message:", error, event.data);
     }
   },
 
