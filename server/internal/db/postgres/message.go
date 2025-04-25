@@ -41,15 +41,16 @@ func (r *Message) Create(message *models.Message) error {
 }
 
 // FindByRoomID finds messages in a room with pagination
-// Now returns MessageDTO with user information
+// Now returns MessageDTO with user information and in chronological order (oldest first)
 func (r *Message) FindByRoomID(roomID string, limit, offset int) ([]*models.MessageDTO, error) {
+	// Changed ORDER BY from DESC to ASC to get oldest messages first
 	query := `
 		SELECT m.id, m.room_id, m.user_id, m.content, m.created_at, m.updated_at,
 		       u.name as user_name, u.avatar as user_avatar
 		FROM messages m
 		JOIN users u ON m.user_id = u.id
 		WHERE m.room_id = $1
-		ORDER BY m.created_at DESC
+		ORDER BY m.created_at ASC
 		LIMIT $2 OFFSET $3
 	`
 

@@ -67,7 +67,6 @@ func (h *WSHandler) HandleConnection(c *gin.Context) {
 	}
 
 	// Validate Token then decode to get user id
-
 	claims, err := h.jwtService.ValidateToken(token)
 	userID := claims.UserID
 
@@ -273,17 +272,21 @@ func (h *WSHandler) handleMessages(client *websocket.Client, user *models.User) 
 				continue
 			}
 
-			// Create response message
-			respMsg := websocket.Message{
-				Type:      "message",
-				RoomID:    clientMsg.RoomID,
-				UserID:    user.ID,
-				Content:   clientMsg.Content,
-				Timestamp: dbMsg.CreatedAt,
-				Data:      json.RawMessage(fmt.Sprintf(`{"id":"%s","user_name":"%s"}`, dbMsg.ID, user.Name)),
+			// FIX: Create a proper message object with all fields directly in the main structure
+			// Don't nest important fields in the Data property
+			messageObj := map[string]interface{}{
+				"type":        "message",
+				"id":          dbMsg.ID,
+				"room_id":     clientMsg.RoomID,
+				"user_id":     user.ID,
+				"content":     clientMsg.Content,
+				"created_at":  dbMsg.CreatedAt,
+				"updated_at":  dbMsg.UpdatedAt,
+				"user_name":   user.Name,
+				"user_avatar": user.Avatar,
 			}
 
-			respBytes, _ := json.Marshal(respMsg)
+			respBytes, _ := json.Marshal(messageObj)
 
 			// Send confirmation back to the sender with the message ID
 			confirmMsg := ServerResponse{
@@ -324,15 +327,18 @@ func (h *WSHandler) handleMessages(client *websocket.Client, user *models.User) 
 			}
 
 			// Create typing message
-			typingMsg := websocket.Message{
-				Type:      "typing",
-				RoomID:    clientMsg.RoomID,
-				UserID:    user.ID,
-				Timestamp: time.Now(),
-				Data:      json.RawMessage(fmt.Sprintf(`{"user_name":"%s","is_typing":%t}`, user.Name, typingData.IsTyping)),
+			typingObj := map[string]interface{}{
+				"type":      "typing",
+				"room_id":   clientMsg.RoomID,
+				"user_id":   user.ID,
+				"timestamp": time.Now(),
+				"data": map[string]interface{}{
+					"user_name": user.Name,
+					"is_typing": typingData.IsTyping,
+				},
 			}
 
-			typingBytes, _ := json.Marshal(typingMsg)
+			typingBytes, _ := json.Marshal(typingObj)
 
 			// Broadcast to all clients in the room
 			h.hub.Broadcast <- &websocket.Message{
@@ -370,15 +376,15 @@ func (h *WSHandler) handleMessages(client *websocket.Client, user *models.User) 
 			}
 
 			// Create read message
-			readMsg := websocket.Message{
-				Type:      "read",
-				RoomID:    clientMsg.RoomID,
-				UserID:    user.ID,
-				Timestamp: time.Now(),
-				Data:      clientMsg.Data, // Pass through the message IDs
+			readObj := map[string]interface{}{
+				"type":        "read",
+				"room_id":     clientMsg.RoomID,
+				"user_id":     user.ID,
+				"timestamp":   time.Now(),
+				"message_ids": readData.MessageIDs,
 			}
 
-			readBytes, _ := json.Marshal(readMsg)
+			readBytes, _ := json.Marshal(readObj)
 
 			// Broadcast to all clients in the room
 			h.hub.Broadcast <- &websocket.Message{
@@ -408,17 +414,21 @@ func (h *WSHandler) sendRoomHistory(client *websocket.Client, roomID string) {
 	for i := len(messages) - 1; i >= 0; i-- {
 		msg := messages[i]
 
-		// Create history message - now we can use msg.UserName directly
-		historyMsg := websocket.Message{
-			Type:      "message",
-			RoomID:    roomID,
-			UserID:    msg.UserID,
-			Content:   msg.Content,
-			Timestamp: msg.CreatedAt,
-			Data:      json.RawMessage(fmt.Sprintf(`{"id":"%s","user_name":"%s","history":true}`, msg.ID, msg.UserName)),
+		// FIX: Create proper history message with all fields at the top level
+		historyObj := map[string]interface{}{
+			"type":        "message",
+			"id":          msg.ID,
+			"room_id":     roomID,
+			"user_id":     msg.UserID,
+			"content":     msg.Content,
+			"created_at":  msg.CreatedAt,
+			"updated_at":  msg.UpdatedAt,
+			"user_name":   msg.UserName,
+			"user_avatar": msg.UserAvatar,
+			"history":     true,
 		}
 
-		historyBytes, _ := json.Marshal(historyMsg)
+		historyBytes, _ := json.Marshal(historyObj)
 
 		// Send directly to the client
 		select {
