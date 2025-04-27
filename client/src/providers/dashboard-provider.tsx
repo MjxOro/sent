@@ -19,6 +19,8 @@ import {
   ConnectionStatus,
   TypingUser,
 } from "@/stores/websocketStore";
+import { useNotificationStore } from "@/stores/notificationStore";
+import { useFriendStore } from "@/stores/friendStore";
 
 // Define the chat context with all the properties and methods we want to expose
 interface ChatContextType {
@@ -102,6 +104,10 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
     _cleanupStaleTypingIndicators,
   } = useSocketStore();
 
+  // Get notification and friend stores
+  const { loadNotifications } = useNotificationStore();
+  const { loadPendingRequests, loadFriends } = useFriendStore();
+
   // Wrap some functions to simplify the API
   const setCurrentThread = useCallback(
     (threadId: string) => {
@@ -170,6 +176,19 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
 
         // Connect to WebSocket using your auth approach
         await connectWebSocket();
+
+        // Load notifications and friends data
+        await loadNotifications();
+        await loadPendingRequests();
+        await loadFriends();
+
+        // Request browser notification permission
+        if (
+          Notification.permission !== "granted" &&
+          Notification.permission !== "denied"
+        ) {
+          await Notification.requestPermission();
+        }
       };
 
       initializeApp();
@@ -184,6 +203,9 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
     loadThreads,
     connectWebSocket,
     disconnectWebSocket,
+    loadNotifications,
+    loadPendingRequests,
+    loadFriends,
   ]);
 
   // Extract thread ID from pathname if available
