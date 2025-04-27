@@ -1,4 +1,4 @@
-// src/stores/messageStore.ts
+// src/stores/messageStore.ts (updated with read status)
 import { create } from "zustand";
 import { useThreadStore } from "./threadStore";
 
@@ -12,6 +12,7 @@ export interface Message {
   updated_at?: string;
   user_name?: string;
   user_avatar?: string;
+  read_by?: string[]; // Array of user IDs who have read this message
   formatted?: {
     role: "user" | "assistant" | "system";
     timestamp: Date;
@@ -38,6 +39,9 @@ interface MessageState {
   updateMessage: (messageId: string, updates: Partial<Message>) => void;
   clearMessages: (roomId: string) => void;
   markMessagesAsRead: (roomId: string, messageIds: string[]) => Promise<void>;
+
+  // Get unread messages in a room
+  getUnreadMessages: (roomId: string) => Message[];
 }
 
 export const useMessageStore = create<MessageState>()((set, get) => ({
@@ -286,6 +290,9 @@ export const useMessageStore = create<MessageState>()((set, get) => ({
   markMessagesAsRead: async (roomId, messageIds) => {
     if (!roomId || !messageIds.length) return;
 
+    const userId = localStorage.getItem("userId");
+    if (!userId) return;
+
     try {
       // API call to mark messages as read (using cookie auth approach)
       const response = await fetch(`/api/rooms/${roomId}/read`, {
@@ -300,10 +307,53 @@ export const useMessageStore = create<MessageState>()((set, get) => ({
         throw new Error("Failed to mark messages as read");
       }
 
+      // Update local message state to reflect read status
+      set((state) => {
+        const roomMessages = state.messages[roomId];
+        if (!roomMessages) return state;
+
+        const updatedMessages = roomMessages.map((message) => {
+          if (messageIds.includes(message.id)) {
+            // Create or update read_by array
+            const readBy = message.read_by || [];
+            if (!readBy.includes(userId)) {
+              return {
+                ...message,
+                read_by: [...readBy, userId],
+              };
+            }
+          }
+          return message;
+        });
+
+        return {
+          messages: {
+            ...state.messages,
+            [roomId]: updatedMessages,
+          },
+        };
+      });
+
       // Reset unread count for this thread
       useThreadStore.getState().resetUnreadCount(roomId);
     } catch (error) {
       console.error("Error marking messages as read:", error);
     }
+  },
+
+  // Get unread messages for a specific room
+  getUnreadMessages: (roomId) => {
+    const messages = get().messages[roomId] || [];
+    const userId = localStorage.getItem("userId");
+
+    if (!userId) return [];
+
+    // Return messages that haven't been read by the current user
+    // and weren't sent by the current user
+    return messages.filter(
+      (message) =>
+        message.user_id !== userId &&
+        (!message.read_by || !message.read_by.includes(userId)),
+    );
   },
 }));

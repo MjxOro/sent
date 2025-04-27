@@ -1,6 +1,9 @@
+// src/stores/websocketStore.ts
 import { create } from "zustand";
 import { useMessageStore } from "./messageStore";
 import { useThreadStore } from "./threadStore";
+import { useNotificationStore } from "./notificationStore";
+import { useFriendStore } from "./friendStore";
 
 // Types
 export type ConnectionStatus =
@@ -57,6 +60,9 @@ interface SocketState {
   sendMessage: (roomId: string | null, content: string) => void;
   sendTypingIndicator: (roomId: string, isTyping: boolean) => void;
   createThread: (title: string) => Promise<string>;
+
+  // Read message tracking
+  markMessagesAsRead: (roomId: string, messageIds: string[]) => void;
 
   // Internal actions (not exposed in provider)
   _handleMessage: (event: MessageEvent) => void;
@@ -365,11 +371,42 @@ export const useSocketStore = create<SocketState>()((set, get) => ({
     });
   },
 
+  // Mark messages as read
+  markMessagesAsRead: (roomId, messageIds) => {
+    const { instance, status } = get();
+
+    if (!roomId || !messageIds.length || status !== "connected" || !instance)
+      return;
+
+    console.log(`Marking messages as read in room ${roomId}:`, messageIds);
+
+    // Send read receipt via WebSocket
+    const message: ClientMessage = {
+      type: "read",
+      room_id: roomId,
+      data: { message_ids: messageIds },
+    };
+
+    try {
+      instance.send(JSON.stringify(message));
+
+      // Update the UI immediately (optimistic update)
+      useMessageStore.getState().markMessagesAsRead(roomId, messageIds);
+
+      // Reset unread count for this thread
+      useThreadStore.getState().resetUnreadCount(roomId);
+    } catch (err) {
+      console.error("Error sending read receipts:", err);
+    }
+  },
+
   _handleMessage: (event) => {
     try {
       console.log("Received WebSocket message:", event.data);
       const data = JSON.parse(event.data) as ServerMessage;
       console.log("Parsed message:", data);
+
+      const { addNotification } = useNotificationStore.getState();
 
       // Handle different message types
       switch (data.type) {
@@ -383,6 +420,27 @@ export const useSocketStore = create<SocketState>()((set, get) => ({
           console.log("Adding message to store:", data);
           // Add received message to the store
           useMessageStore.getState().addMessage(data);
+
+          // If message is not from current user and not in active thread,
+          // create a notification
+          const currentThreadId = useThreadStore.getState().currentThreadId;
+          const userId = localStorage.getItem("userId");
+
+          if (data.user_id !== userId && data.room_id !== currentThreadId) {
+            // Get username
+            const userName = data.user_name || "Someone";
+
+            // Create notification
+            addNotification({
+              type: "message",
+              title: `New message from ${userName}`,
+              message:
+                data.content.length > 50
+                  ? `${data.content.substring(0, 47)}...`
+                  : data.content,
+              sourceId: data.room_id,
+            });
+          }
           break;
 
         case "message_sent":
@@ -470,6 +528,49 @@ export const useSocketStore = create<SocketState>()((set, get) => ({
 
         case "read":
           // Handle read receipts
+          if (data.room_id && data.user_id && data.message_ids) {
+            // Update message read status in the UI
+            // This is useful if you want to show read receipts for messages
+            console.log(
+              `User ${data.user_id} read messages:`,
+              data.message_ids,
+            );
+
+            // You could update individual message objects to show "read by" info
+            // For now, we'll just acknowledge it
+          }
+          break;
+
+        case "friend_request":
+          // Handle incoming friend request
+          if (data.user_id && data.user_name) {
+            // Add a notification for the friend request
+            addNotification({
+              type: "friend_request",
+              title: "New Friend Request",
+              message: `${data.user_name} sent you a friend request`,
+              sourceId: data.friendship_id,
+            });
+
+            // Refresh friend requests
+            useFriendStore.getState().loadPendingRequests();
+          }
+          break;
+
+        case "friend_accepted":
+          // Handle friend request accepted
+          if (data.user_id && data.user_name) {
+            // Add a notification
+            addNotification({
+              type: "friend_accepted",
+              title: "Friend Request Accepted",
+              message: `${data.user_name} accepted your friend request`,
+              sourceId: data.user_id,
+            });
+
+            // Refresh friends list
+            useFriendStore.getState().loadFriends();
+          }
           break;
 
         default:
