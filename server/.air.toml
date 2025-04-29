@@ -2,7 +2,7 @@ root = "."
 tmp_dir = "tmp"
 [build]
   bin = "./tmp/api"
-  cmd = "go mod download && go build -ldflags \"-X main.serverHost=0.0.0.0\" -o ./tmp/api ./cmd/api/main.go"
+  cmd = "go run scripts/migrations/run.go && go mod download && go build -ldflags \"-X main.serverHost=0.0.0.0\" -o ./tmp/api ./cmd/api/main.go"
   delay = 1000
   exclude_dir = ["assets", "tmp", "vendor"]
   exclude_file = []
