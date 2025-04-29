@@ -23,6 +23,7 @@ export default function NewChatPage() {
           router.push(`/dashboard/${threadId}`);
         } catch (error) {
           console.error("Failed to create new chat:", error);
+          router.push("/");
         }
       };
 
@@ -44,9 +45,5 @@ export default function NewChatPage() {
     );
   }
   // While redirecting, show the dashboard in a "new chat" state
-  return (
-    <DashboardProvider>
-      <Dashboard />;
-    </DashboardProvider>
-  );
+  return <Dashboard />;
 }

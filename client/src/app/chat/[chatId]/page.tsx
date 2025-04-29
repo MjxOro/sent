@@ -2,6 +2,7 @@
 import { Suspense } from "react";
 import Dashboard from "@/components/Dashboard";
 import ChatLoading from "./loading";
+import { cookies } from "next/headers";
 
 // Metadata for the page
 export const metadata = {
@@ -12,7 +13,9 @@ export const metadata = {
 // This is a server component that fetches initial data
 async function ChatPage({ params }: { params: { chatId: string } }) {
   // You can prefetch data here for initial state
-  const chatId = await Promise.resolve(params.chatId);
+  const token = (await cookies()).get("auth_token")?.value;
+  const response = await Promise.resolve(params);
+  const { chatId } = response;
   // Try to fetch initial messages and chat details on the server
   let initialMessages = [];
   let chatDetails = null;
@@ -20,12 +23,12 @@ async function ChatPage({ params }: { params: { chatId: string } }) {
   try {
     // Fetch chat details
     const detailsRes = await fetch(
-      `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080"}/api/rooms/${chatId}`,
+      `${process.env.NEXT_PUBLIC_API_URL || "http://backend:8080"}/api/rooms/${chatId}`,
       {
         cache: "no-store", // Don't cache this data
         headers: {
-          // Note: Server-side requests need to handle auth differently
-          // You might need to pass cookies or other auth mechanisms
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
         },
       },
     );
@@ -36,11 +39,12 @@ async function ChatPage({ params }: { params: { chatId: string } }) {
 
     // Fetch initial messages
     const messagesRes = await fetch(
-      `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080"}/api/rooms/${chatId}/messages?limit=50&offset=0`,
+      `${process.env.NEXT_PUBLIC_API_URL || "http://backend:8080"}/api/rooms/${chatId}/messages?limit=50&offset=0`,
       {
         cache: "no-store",
         headers: {
-          // Same auth concerns apply here
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
         },
       },
     );
