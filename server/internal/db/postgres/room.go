@@ -133,3 +133,10 @@ func (r *Room) GetRoomMembers(roomID string) ([]*models.User, error) {
 
 	return users, nil
 }
+
+// Delete deletes a room by ID
+func (r *Room) Delete(id string) error {
+	query := `DELETE FROM rooms WHERE id = $1`
+	_, err := r.db.Exec(query, id)
+	return err
+}

@@ -64,15 +64,23 @@ func (h *WSHandler) HandleConnection(c *gin.Context) {
 	token := c.Query("token")
 	if token == "" {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return // Added return statement
 	}
 
 	// Validate Token then decode to get user id
 	claims, err := h.jwtService.ValidateToken(token)
+	if err != nil {
+		log.Printf("Invalid token: %v", err)
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid token"})
+		return // Added return statement
+	}
+
 	userID := claims.UserID
 
 	// Get user info
 	user, err := h.userService.GetByID(userID)
 	if err != nil {
+		log.Printf("User not found: %v", err)
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid user"})
 		return
 	}
@@ -96,6 +104,9 @@ func (h *WSHandler) HandleConnection(c *gin.Context) {
 	client := websocket.NewClient(h.hub, conn, userID)
 	h.hub.Register <- client
 
+	// Log the successful connection
+	log.Printf("WebSocket connection established for user: %s (%s)", user.Name, userID)
+
 	// Start server-side goroutines
 	go h.handleMessages(client, user)
 	go client.WritePump()
@@ -104,6 +115,11 @@ func (h *WSHandler) HandleConnection(c *gin.Context) {
 // handleMessages handles incoming messages from a client
 func (h *WSHandler) handleMessages(client *websocket.Client, user *models.User) {
 	defer func() {
+		// Recover from any panics
+		if r := recover(); r != nil {
+			log.Printf("Recovered from panic in handleMessages: %v", r)
+		}
+
 		h.hub.Unregister <- client
 		client.Conn.Close()
 
@@ -139,12 +155,25 @@ func (h *WSHandler) handleMessages(client *websocket.Client, user *models.User) 
 			break
 		}
 
+		// Log the raw message for debugging
+		log.Printf("Received raw message from client %s: %s", client.ID, string(msgBytes))
+
 		// Parse the raw client message
 		var clientMsg ClientMessage
 		if err := json.Unmarshal(msgBytes, &clientMsg); err != nil {
-			log.Printf("Error parsing message: %v", err)
+			log.Printf("Error parsing message: %v, raw message: %s", err, string(msgBytes))
+			// Send error response to client
+			errResp := ServerResponse{
+				Type:    "error",
+				Success: false,
+				Message: "Invalid message format",
+			}
+			errRespBytes, _ := json.Marshal(errResp)
+			client.Send <- errRespBytes
 			continue
 		}
+
+		log.Printf("Parsed message from client %s: %+v", client.ID, clientMsg)
 
 		// Process different message types
 		switch clientMsg.Type {
@@ -156,6 +185,14 @@ func (h *WSHandler) handleMessages(client *websocket.Client, user *models.User) 
 
 			if err := json.Unmarshal(clientMsg.Data, &createData); err != nil {
 				log.Printf("Error parsing thread creation data: %v", err)
+				// Send error response
+				errResp := ServerResponse{
+					Type:    "thread_created",
+					Success: false,
+					Message: "Invalid thread creation data",
+				}
+				errRespBytes, _ := json.Marshal(errResp)
+				client.Send <- errRespBytes
 				continue
 			}
 
@@ -187,12 +224,16 @@ func (h *WSHandler) handleMessages(client *websocket.Client, user *models.User) 
 
 			responseBytes, _ := json.Marshal(response)
 			client.Send <- responseBytes
+			log.Printf("Thread created: %s", room.ID)
 
 		case "subscribe":
 			// Handle room subscription
 			if clientMsg.RoomID == "" {
+				log.Printf("Subscribe message missing room_id from client %s", client.ID)
 				continue
 			}
+
+			log.Printf("Client %s subscribing to room %s", client.ID, clientMsg.RoomID)
 
 			// Subscribe client to room
 			h.hub.Subscribe <- &websocket.Subscription{
@@ -225,8 +266,11 @@ func (h *WSHandler) handleMessages(client *websocket.Client, user *models.User) 
 		case "unsubscribe":
 			// Handle room unsubscription
 			if clientMsg.RoomID == "" {
+				log.Printf("Unsubscribe message missing room_id from client %s", client.ID)
 				continue
 			}
+
+			log.Printf("Client %s unsubscribing from room %s", client.ID, clientMsg.RoomID)
 
 			// Unsubscribe client from room
 			h.hub.Unsubscribe <- &websocket.Subscription{
@@ -256,19 +300,40 @@ func (h *WSHandler) handleMessages(client *websocket.Client, user *models.User) 
 		case "message":
 			// Handle chat message
 			if clientMsg.RoomID == "" || clientMsg.Content == "" {
+				log.Printf("Message missing room_id or content from client %s", client.ID)
 				continue
 			}
 
 			// Verify client is in the room
 			if !client.IsInRoom(clientMsg.RoomID) {
 				log.Printf("Client %s attempted to send message to room %s without subscription", client.ID, clientMsg.RoomID)
+				// Send error response
+				errResp := ServerResponse{
+					Type:    "message_sent",
+					Success: false,
+					RoomID:  clientMsg.RoomID,
+					Message: "Not subscribed to room",
+				}
+				errRespBytes, _ := json.Marshal(errResp)
+				client.Send <- errRespBytes
 				continue
 			}
+
+			log.Printf("Client %s sending message to room %s: %s", client.ID, clientMsg.RoomID, clientMsg.Content)
 
 			// Save message to database
 			dbMsg, err := h.chatService.SendMessage(clientMsg.RoomID, user.ID, clientMsg.Content)
 			if err != nil {
 				log.Printf("Error saving message: %v", err)
+				// Send error response
+				errResp := ServerResponse{
+					Type:    "message_sent",
+					Success: false,
+					RoomID:  clientMsg.RoomID,
+					Message: "Failed to save message",
+				}
+				errRespBytes, _ := json.Marshal(errResp)
+				client.Send <- errRespBytes
 				continue
 			}
 
@@ -305,14 +370,18 @@ func (h *WSHandler) handleMessages(client *websocket.Client, user *models.User) 
 				Client: client,
 			}
 
+			log.Printf("Message broadcast to room %s, message ID: %s", clientMsg.RoomID, dbMsg.ID)
+
 		case "typing":
 			// Handle typing indicator
 			if clientMsg.RoomID == "" {
+				log.Printf("Typing message missing room_id from client %s", client.ID)
 				continue
 			}
 
 			// Verify client is in the room
 			if !client.IsInRoom(clientMsg.RoomID) {
+				log.Printf("Client %s attempted to send typing indicator to room %s without subscription", client.ID, clientMsg.RoomID)
 				continue
 			}
 
@@ -350,11 +419,13 @@ func (h *WSHandler) handleMessages(client *websocket.Client, user *models.User) 
 		case "read":
 			// Handle read receipts
 			if clientMsg.RoomID == "" {
+				log.Printf("Read message missing room_id from client %s", client.ID)
 				continue
 			}
 
 			// Verify client is in the room
 			if !client.IsInRoom(clientMsg.RoomID) {
+				log.Printf("Client %s attempted to send read receipt to room %s without subscription", client.ID, clientMsg.RoomID)
 				continue
 			}
 
@@ -392,9 +463,15 @@ func (h *WSHandler) handleMessages(client *websocket.Client, user *models.User) 
 				Data:   readBytes,
 				Client: client,
 			}
+
+		default:
+			log.Printf("Unknown message type from client %s: %s", client.ID, clientMsg.Type)
 		}
 	}
 }
+
+// sendRoomHistory sends recent message history to a new client
+// server/internal/handler/ws_handler.go
 
 // sendRoomHistory sends recent message history to a new client
 func (h *WSHandler) sendRoomHistory(client *websocket.Client, roomID string) {
@@ -410,11 +487,9 @@ func (h *WSHandler) sendRoomHistory(client *websocket.Client, roomID string) {
 		return
 	}
 
-	// Reverse the order to send oldest first
-	for i := len(messages) - 1; i >= 0; i-- {
-		msg := messages[i]
-
-		// FIX: Create proper history message with all fields at the top level
+	// No need to reverse the order - messages now come from the server newest first
+	// and we'll send them in that same order to maintain consistency
+	for _, msg := range messages {
 		historyObj := map[string]interface{}{
 			"type":        "message",
 			"id":          msg.ID,

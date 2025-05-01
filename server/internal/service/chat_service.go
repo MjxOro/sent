@@ -3,6 +3,7 @@ package service
 
 import (
 	"encoding/json"
+	"fmt"
 	"github.com/mjxoro/sent/server/internal/db/postgres"
 	"github.com/mjxoro/sent/server/internal/db/redis"
 	"github.com/mjxoro/sent/server/internal/models"
@@ -158,4 +159,21 @@ func (s *ChatService) IsUserMemberOfRoom(userID, roomID string) (bool, error) {
 	}
 
 	return false, nil
+}
+
+// DeleteRoom deletes a room if the user is the creator
+func (s *ChatService) DeleteRoom(roomID, userID string) error {
+	// Get room details to check creator
+	room, err := s.pgRoom.FindByID(roomID)
+	if err != nil {
+		return err
+	}
+
+	// Check if user is the creator
+	if room.CreatorID != userID {
+		return fmt.Errorf("unauthorized: only the room creator can delete this room")
+	}
+
+	// Delete the room
+	return s.pgRoom.Delete(roomID)
 }
