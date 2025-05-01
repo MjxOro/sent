@@ -21,11 +21,14 @@ export interface ThreadGroup {
 
 // Helper function to categorize threads into groups
 const categorizeThreads = (threads: Thread[]): ThreadGroup[] => {
+  // Ensure threads is an array
+  const safeThreads = threads || [];
+
   const now = new Date();
   const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
 
   // Sort threads by lastUpdated
-  const sortedThreads = [...threads].sort(
+  const sortedThreads = [...safeThreads].sort(
     (a, b) =>
       new Date(b.lastUpdated).getTime() - new Date(a.lastUpdated).getTime(),
   );
@@ -77,9 +80,12 @@ interface ThreadState {
 export const useThreadStore = create<ThreadState>()(
   persist(
     (set, get) => ({
-      // Initial state
+      // Initial state with proper empty arrays
       threads: [],
-      threadGroups: [],
+      threadGroups: [
+        { id: "recent", label: "Last 7 Days", threads: [] },
+        { id: "older", label: "Older", threads: [] },
+      ],
       currentThreadId: null,
       threadsLoaded: false,
       threadsLoading: false,
@@ -98,9 +104,11 @@ export const useThreadStore = create<ThreadState>()(
           }
 
           const roomsData = await response.json();
+          // Ensure roomsData is an array
+          const safeRoomsData = roomsData || [];
 
           // Map rooms to threads
-          const threads: Thread[] = roomsData.map((room: any) => ({
+          const threads: Thread[] = safeRoomsData.map((room: any) => ({
             id: room.id,
             title: room.name || "Unnamed Chat",
             isPinned: false, // We'll store pinned status locally
@@ -131,8 +139,6 @@ export const useThreadStore = create<ThreadState>()(
         set({ currentThreadId: threadId });
       },
 
-      // Update the createThread function in client/src/stores/threadStore.ts
-
       createThread: async (title, memberIds = []) => {
         try {
           // API call to create a new thread/room (using cookie auth approach)
@@ -145,7 +151,7 @@ export const useThreadStore = create<ThreadState>()(
               name: title,
               description: "",
               is_private: false,
-              member_ids: memberIds, // Add the member IDs
+              member_ids: memberIds || [], // Ensure memberIds is an array
             }),
           });
 
@@ -165,7 +171,8 @@ export const useThreadStore = create<ThreadState>()(
           };
 
           set((state) => {
-            const updatedThreads = [...state.threads, newThread];
+            // Ensure threads is an array
+            const updatedThreads = [...(state.threads || []), newThread];
             return {
               threads: updatedThreads,
               threadGroups: categorizeThreads(updatedThreads),
@@ -181,6 +188,8 @@ export const useThreadStore = create<ThreadState>()(
       },
 
       deleteThread: async (threadId) => {
+        if (!threadId) return;
+
         try {
           // API call to delete the thread/room (using cookie auth approach)
           const response = await fetch(`/api/rooms/${threadId}`, {
@@ -193,9 +202,9 @@ export const useThreadStore = create<ThreadState>()(
 
           // Remove thread from state
           set((state) => {
-            const updatedThreads = state.threads.filter(
-              (t) => t.id !== threadId,
-            );
+            // Ensure threads is an array
+            const safeThreads = state.threads || [];
+            const updatedThreads = safeThreads.filter((t) => t.id !== threadId);
 
             // If we're deleting the current thread, clear current thread ID
             const newCurrentThreadId =
@@ -214,8 +223,12 @@ export const useThreadStore = create<ThreadState>()(
       },
 
       pinThread: (threadId) => {
+        if (!threadId) return;
+
         set((state) => {
-          const updatedThreads = state.threads.map((thread) =>
+          // Ensure threads is an array
+          const safeThreads = state.threads || [];
+          const updatedThreads = safeThreads.map((thread) =>
             thread.id === threadId
               ? { ...thread, isPinned: !thread.isPinned }
               : thread,
@@ -229,8 +242,12 @@ export const useThreadStore = create<ThreadState>()(
       },
 
       updateThreadLastMessage: (threadId, message) => {
+        if (!threadId || !message) return;
+
         set((state) => {
-          const updatedThreads = state.threads.map((thread) => {
+          // Ensure threads is an array
+          const safeThreads = state.threads || [];
+          const updatedThreads = safeThreads.map((thread) => {
             if (thread.id === threadId) {
               return {
                 ...thread,
@@ -251,12 +268,19 @@ export const useThreadStore = create<ThreadState>()(
       },
 
       incrementUnreadCount: (threadId) => {
+        if (!threadId) return;
+
         set((state) => {
-          const updatedThreads = state.threads.map((thread) => {
+          // Ensure threads is an array
+          const safeThreads = state.threads || [];
+          const updatedThreads = safeThreads.map((thread) => {
             if (thread.id === threadId && thread.id !== state.currentThreadId) {
+              // Initialize unreadCount if needed
+              const currentUnreadCount =
+                typeof thread.unreadCount === "number" ? thread.unreadCount : 0;
               return {
                 ...thread,
-                unreadCount: (thread.unreadCount || 0) + 1,
+                unreadCount: currentUnreadCount + 1,
               };
             }
             return thread;
@@ -270,8 +294,12 @@ export const useThreadStore = create<ThreadState>()(
       },
 
       resetUnreadCount: (threadId) => {
+        if (!threadId) return;
+
         set((state) => {
-          const updatedThreads = state.threads.map((thread) => {
+          // Ensure threads is an array
+          const safeThreads = state.threads || [];
+          const updatedThreads = safeThreads.map((thread) => {
             if (thread.id === threadId) {
               return {
                 ...thread,
@@ -292,7 +320,7 @@ export const useThreadStore = create<ThreadState>()(
       name: "chat-threads-storage",
       partialize: (state) => ({
         // Only persist these fields
-        threads: state.threads.map((thread) => ({
+        threads: (state.threads || []).map((thread) => ({
           id: thread.id,
           title: thread.title,
           isPinned: thread.isPinned,

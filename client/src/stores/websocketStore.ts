@@ -80,6 +80,15 @@ export const useSocketStore = create<SocketState>()((set, get) => ({
 
   // Connection actions
   connect: async () => {
+    // If already connecting or connected, don't try again
+    const currentStatus = get().status;
+    if (currentStatus === "connecting" || currentStatus === "connected") {
+      console.log(
+        `Already ${currentStatus} to WebSocket, skipping connection attempt`,
+      );
+      return;
+    }
+
     // Disconnect existing connection if any
     get().disconnect();
 
@@ -194,23 +203,43 @@ export const useSocketStore = create<SocketState>()((set, get) => ({
   subscribeToRoom: (roomId) => {
     const { instance, status, activeRooms } = get();
 
-    if (!roomId || status !== "connected" || !instance) return;
+    if (!roomId) return;
+
+    console.log(`Attempting to subscribe to room ${roomId}`);
+
+    // If already subscribed, don't do it again
+    if (activeRooms.has(roomId)) {
+      console.log(`Already subscribed to room ${roomId}`);
+      return;
+    }
 
     // Create a subscribe message
-    const message: ClientMessage = {
+    const message = {
       type: "subscribe",
       room_id: roomId,
     };
 
-    // Send subscription request
-    instance.send(JSON.stringify(message));
+    // If connected, send subscription right away
+    if (status === "connected" && instance) {
+      console.log(`Sending room subscription for ${roomId}`);
+      try {
+        instance.send(JSON.stringify(message));
+      } catch (err) {
+        console.error(`Error subscribing to room ${roomId}:`, err);
+        // Will try again when connection is restored
+      }
+    } else {
+      console.log(
+        `Not connected, will subscribe to ${roomId} after reconnection`,
+      );
+    }
 
-    // Update active rooms
+    // Update active rooms so we know to subscribe when connection is restored
     const newActiveRooms = new Set(activeRooms);
     newActiveRooms.add(roomId);
     set({ activeRooms: newActiveRooms });
 
-    // Load messages for this room
+    // Always try to load messages for this room
     useMessageStore.getState().loadMessages(roomId, true);
   },
 
@@ -243,7 +272,7 @@ export const useSocketStore = create<SocketState>()((set, get) => ({
       return;
     }
 
-    const { instance, status, pendingMessages } = get();
+    const { instance, status, activeRooms } = get();
     console.log(`WebSocket status: ${status}, instance exists: ${!!instance}`);
 
     // If we don't have a current room ID, we need to create a new thread first
@@ -284,18 +313,37 @@ export const useSocketStore = create<SocketState>()((set, get) => ({
     if (instance && status === "connected") {
       try {
         console.log("Sending message via WebSocket...");
-        const messageString = JSON.stringify(message);
-        console.log("Stringified message:", messageString);
+
+        // FIX: Add extra safety with try-catch blocks
+        let messageString;
+        try {
+          messageString = JSON.stringify(message);
+          console.log("Stringified message:", messageString);
+        } catch (err) {
+          console.error("Error stringifying message:", err);
+          queueMessage(roomId, content.trim());
+          return;
+        }
+
+        // Check if websocket is still open before sending
+        if (instance.readyState !== WebSocket.OPEN) {
+          console.log("WebSocket is no longer open, reconnecting...");
+          queueMessage(roomId, content.trim());
+          get().connect();
+          return;
+        }
+
         instance.send(messageString);
         console.log("Message sent successfully");
-
-        // We don't add the message to the UI immediately anymore
-        // The server will send us back the message with an ID
-        // and it will be added to the UI at that point
       } catch (err) {
         console.error("Error sending message:", err);
         // Queue message if sending fails
         queueMessage(roomId, content.trim());
+
+        // Try to reconnect
+        setTimeout(() => {
+          get().connect();
+        }, 1000);
       }
     } else {
       console.log(

@@ -173,7 +173,7 @@ export const useFriendStore = create<FriendState>()((set, get) => ({
 
   sendFriendRequest: async (userId: string) => {
     try {
-      const response = await fetch(`/api/friends/request/${userId}`, {
+      const response = await fetch(`/api/friends/requests/${userId}`, {
         method: "POST",
         credentials: "include",
       });
