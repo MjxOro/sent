@@ -111,11 +111,25 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
   // Wrap some functions to simplify the API
   const setCurrentThread = useCallback(
     (threadId: string) => {
-      if (currentThreadId) {
+      console.log(`Setting current thread to ${threadId}`);
+
+      // Unsubscribe from previous room if needed
+      if (currentThreadId && currentThreadId !== threadId) {
+        console.log(`Unsubscribing from previous room ${currentThreadId}`);
         unsubscribeFromRoom(currentThreadId);
       }
+
+      // Set as current thread
       setCurrentThreadOriginal(threadId);
-      subscribeToRoom(threadId);
+
+      // Make sure we're subscribed to the new room
+      if (threadId) {
+        console.log(`Subscribing to room ${threadId}`);
+        subscribeToRoom(threadId);
+
+        // Also load messages for this room
+        useMessageStore.getState().loadMessages(threadId, true);
+      }
     },
     [
       currentThreadId,
@@ -127,11 +141,28 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
 
   const createThread = useCallback(
     async (title: string, memberIds: string[] = []) => {
-      const threadId = await createThreadOriginal(title, memberIds);
-      setCurrentThread(threadId);
-      return threadId;
+      try {
+        console.log(`Creating thread "${title}" with members:`, memberIds);
+
+        // First, create the thread through the threadStore
+        const threadId = await createThreadOriginal(title, memberIds);
+        console.log(`Thread created with ID: ${threadId}`);
+
+        // Set it as the current thread immediately
+        setCurrentThreadOriginal(threadId);
+
+        // Explicitly subscribe to the room right away
+        // This is important for group chats
+        subscribeToRoom(threadId);
+
+        // Return the thread ID
+        return threadId;
+      } catch (error) {
+        console.error("Error creating thread:", error);
+        throw error;
+      }
     },
-    [createThreadOriginal, setCurrentThread],
+    [createThreadOriginal, setCurrentThreadOriginal, subscribeToRoom],
   );
 
   const sendMessage = useCallback(
@@ -213,6 +244,9 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
     if (pathname?.startsWith("/chat/") && isInitialized) {
       const threadId = pathname.replace("/chat/", "");
       if (threadId && threadId !== currentThreadId) {
+        console.log(`URL changed to thread ${threadId}, setting as current`);
+
+        // Set as current thread, which will handle subscription
         setCurrentThread(threadId);
       }
     }
