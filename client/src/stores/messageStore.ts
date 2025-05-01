@@ -1,4 +1,4 @@
-// src/stores/messageStore.ts
+// src/stores/messageStore.ts (updated with read status)
 import { create } from "zustand";
 import { useThreadStore } from "./threadStore";
 
@@ -45,7 +45,7 @@ interface MessageState {
 }
 
 export const useMessageStore = create<MessageState>()((set, get) => ({
-  // Initial state - with empty arrays
+  // Initial state
   messages: {},
   messageLoadInfo: {},
 
@@ -97,17 +97,14 @@ export const useMessageStore = create<MessageState>()((set, get) => ({
 
       const messagesData: Message[] = await response.json();
 
-      // Ensure messagesData is an array
-      const safeMessagesData = messagesData || [];
-
       // Update thread's last message if we have messages and refreshing
-      if (safeMessagesData.length > 0 && refresh) {
+      if (messagesData.length > 0 && refresh) {
         // Find the most recent message
-        const latestMessage = safeMessagesData.reduce((latest, current) => {
+        const latestMessage = messagesData.reduce((latest, current) => {
           const latestDate = new Date(latest.created_at).getTime();
           const currentDate = new Date(current.created_at).getTime();
           return currentDate > latestDate ? current : latest;
-        }, safeMessagesData[0]);
+        }, messagesData[0]);
 
         // Update the thread with the latest message
         useThreadStore
@@ -116,7 +113,7 @@ export const useMessageStore = create<MessageState>()((set, get) => ({
       }
 
       // Format messages
-      const formattedMessages = safeMessagesData.map((msg) => ({
+      const formattedMessages: Message[] = messagesData.map((msg) => ({
         ...msg,
         formatted: {
           role:
@@ -131,7 +128,6 @@ export const useMessageStore = create<MessageState>()((set, get) => ({
 
       // Update state
       set((state) => {
-        // Initialize messages array if needed
         const currentMessages = refresh ? [] : state.messages[roomId] || [];
 
         // Add new messages - avoid duplicates by ID
@@ -140,7 +136,8 @@ export const useMessageStore = create<MessageState>()((set, get) => ({
           (m) => !existingIds.has(m.id),
         );
 
-        // const allMessages = [...currentMessages, ...newMessages];
+        // Sort messages newest first (for rendering in reverse)
+        // const allMessages = [...currentMessages, ...newMessages]
         const allMessages = [...newMessages, ...currentMessages];
 
         return {
@@ -152,8 +149,8 @@ export const useMessageStore = create<MessageState>()((set, get) => ({
             ...state.messageLoadInfo,
             [roomId]: {
               isLoading: false,
-              hasMoreMessages: safeMessagesData.length === limit,
-              offset: offset + safeMessagesData.length,
+              hasMoreMessages: messagesData.length === limit,
+              offset: offset + messagesData.length,
               error: null,
             },
           },
@@ -184,15 +181,13 @@ export const useMessageStore = create<MessageState>()((set, get) => ({
     await get().loadMessages(roomId, false);
   },
 
-  // client/src/stores/messageStore.ts
-
   addMessage: (message) => {
     const roomId = message.room_id;
 
-    // Format the message
-    const formattedMessage = {
+    // Ensure the message has the formatted property that matches our Message type
+    const formattedMessage: Message = {
       ...message,
-      formatted: {
+      formatted: message.formatted || {
         role:
           message.user_id === "system"
             ? "system"
@@ -212,8 +207,7 @@ export const useMessageStore = create<MessageState>()((set, get) => ({
         return state; // Message already exists, no update needed
       }
 
-      // Add new message at the beginning (newest first)
-      // This matches the server's ordering now
+      // Add message and sort (newest first)
       // const updatedMessages = [formattedMessage, ...currentMessages];
       const updatedMessages = [...currentMessages, formattedMessage];
 
@@ -238,16 +232,13 @@ export const useMessageStore = create<MessageState>()((set, get) => ({
   },
 
   updateMessage: (messageId, updates) => {
-    if (!messageId) return;
-
     set((state) => {
       // Create a new messages object with the update applied
       const updatedMessages = { ...state.messages };
 
       // Find the room containing this message
       for (const roomId in updatedMessages) {
-        // Initialize room messages array if needed
-        const roomMessages = updatedMessages[roomId] || [];
+        const roomMessages = updatedMessages[roomId];
         const messageIndex = roomMessages.findIndex((m) => m.id === messageId);
 
         if (messageIndex >= 0) {
@@ -268,8 +259,6 @@ export const useMessageStore = create<MessageState>()((set, get) => ({
   },
 
   clearMessages: (roomId) => {
-    if (!roomId) return;
-
     set((state) => ({
       messages: {
         ...state.messages,
@@ -288,11 +277,7 @@ export const useMessageStore = create<MessageState>()((set, get) => ({
   },
 
   markMessagesAsRead: async (roomId, messageIds) => {
-    if (!roomId) return;
-
-    // Ensure messageIds is an array
-    const safeMessageIds = messageIds || [];
-    if (safeMessageIds.length === 0) return;
+    if (!roomId || !messageIds.length) return;
 
     const userId = localStorage.getItem("userId");
     if (!userId) return;
@@ -304,7 +289,7 @@ export const useMessageStore = create<MessageState>()((set, get) => ({
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ message_ids: safeMessageIds }),
+        body: JSON.stringify({ message_ids: messageIds }),
       });
 
       if (!response.ok) {
@@ -313,13 +298,12 @@ export const useMessageStore = create<MessageState>()((set, get) => ({
 
       // Update local message state to reflect read status
       set((state) => {
-        // Initialize room messages array if needed
-        const roomMessages = state.messages[roomId] || [];
-        if (roomMessages.length === 0) return state;
+        const roomMessages = state.messages[roomId];
+        if (!roomMessages) return state;
 
         const updatedMessages = roomMessages.map((message) => {
-          if (safeMessageIds.includes(message.id)) {
-            // Initialize read_by array if needed
+          if (messageIds.includes(message.id)) {
+            // Create or update read_by array
             const readBy = message.read_by || [];
             if (!readBy.includes(userId)) {
               return {
@@ -348,7 +332,6 @@ export const useMessageStore = create<MessageState>()((set, get) => ({
 
   // Get unread messages for a specific room
   getUnreadMessages: (roomId) => {
-    // Initialize room messages array if needed
     const messages = get().messages[roomId] || [];
     const userId = localStorage.getItem("userId");
 
@@ -356,10 +339,10 @@ export const useMessageStore = create<MessageState>()((set, get) => ({
 
     // Return messages that haven't been read by the current user
     // and weren't sent by the current user
-    return messages.filter((message) => {
-      // Initialize read_by array if needed
-      const readBy = message.read_by || [];
-      return message.user_id !== userId && !readBy.includes(userId);
-    });
+    return messages.filter(
+      (message) =>
+        message.user_id !== userId &&
+        (!message.read_by || !message.read_by.includes(userId)),
+    );
   },
 }));
