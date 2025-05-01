@@ -48,7 +48,7 @@ export default function FriendsPage() {
       <div className="container mx-auto px-4 py-8">
         <div className="mb-4">
           <button
-            onClick={() => router.push("/chat")}
+            onClick={() => router.push("/")}
             className="flex items-center text-gray-600 dark:text-gray-300 hover:text-pink-600 dark:hover:text-pink-400"
           >
             <span>← Back to Chat</span>
