@@ -201,6 +201,34 @@ func main() {
 				c.JSON(200, messages)
 			})
 
+			protected.DELETE("/rooms/:roomId", func(c *gin.Context) {
+				userID := c.GetString("userID")
+				roomID := c.Param("roomId")
+
+				// Check if user is a member of the room
+				isMember, err := chatService.IsUserMemberOfRoom(userID, roomID)
+				if err != nil {
+					c.JSON(500, gin.H{"error": "error checking membership"})
+					return
+				}
+
+				if !isMember {
+					c.JSON(403, gin.H{"error": "access denied"})
+					return
+				}
+
+				// Delete the room
+				if err := chatService.DeleteRoom(roomID, userID); err != nil {
+					if err.Error() == "unauthorized: only the room creator can delete this room" {
+						c.JSON(403, gin.H{"error": err.Error()})
+					} else {
+						c.JSON(500, gin.H{"error": "failed to delete room"})
+					}
+					return
+				}
+
+				c.JSON(200, gin.H{"message": "room deleted successfully"})
+			})
 			// Friendship routes
 			friendRoutes := protected.Group("/friends")
 			{
@@ -210,7 +238,7 @@ func main() {
 				friendRoutes.GET("/potential", friendshipHandler.GetPotentialFriends)
 				friendRoutes.GET("/status/:userId", friendshipHandler.GetFriendshipStatus)
 
-				friendRoutes.POST("/request/:userId", friendshipHandler.SendFriendRequest)
+				friendRoutes.POST("/requests/:userId", friendshipHandler.SendFriendRequest)
 				friendRoutes.POST("/accept/:friendshipId", friendshipHandler.AcceptFriendRequest)
 				friendRoutes.POST("/reject/:friendshipId", friendshipHandler.RejectFriendRequest)
 				friendRoutes.DELETE("/:userId", friendshipHandler.RemoveFriend)
