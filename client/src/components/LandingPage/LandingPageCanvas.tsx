@@ -5,7 +5,6 @@ import { Suspense } from "react";
 import { Stars } from "@react-three/drei";
 import dynamic from "next/dynamic";
 import CanvasWrapper from "@/components/CanvasWrapper";
-import { useExitStore } from "@/providers/store-provider";
 // Dynamic imports for better code splitting
 const PaperPlane = dynamic(
   () => import("@/components/LandingPage/PaperPlane"),
@@ -21,8 +20,6 @@ const Background = dynamic(
 );
 
 const LandingPage = () => {
-  const { exitThree } = useExitStore((state) => state);
-
   return (
     <CanvasWrapper>
       <pointLight position={[0, 10, 4]} color={"#FFD042"} />
@@ -37,10 +34,7 @@ const LandingPage = () => {
       />
       <Suspense fallback={null}>
         <Background />
-        <PaperPlane
-          scale={[0.003, 0.003, 0.003]}
-          position={exitThree ? [0, 0, -2] : [0, 0, 4]}
-        />
+        <PaperPlane scale={[0.003, 0.003, 0.003]} position={[0, 0, 4]} />
       </Suspense>
     </CanvasWrapper>
   );
