@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 
 export async function POST(
-  _: NextResponse,
+  _: NextRequest,
   { params }: { params: { friendshipId: string } },
 ) {
   try {
