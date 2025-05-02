@@ -98,7 +98,7 @@ export const useMessageStore = create<MessageState>()((set, get) => ({
       const messagesData: Message[] = await response.json();
 
       // Update thread's last message if we have messages and refreshing
-      if (messagesData.length > 0 && refresh) {
+      if (messagesData?.length > 0 && refresh) {
         // Find the most recent message
         const latestMessage = messagesData.reduce((latest, current) => {
           const latestDate = new Date(latest.created_at).getTime();
