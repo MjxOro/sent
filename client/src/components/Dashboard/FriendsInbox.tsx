@@ -34,9 +34,13 @@ export default function FriendsInbox() {
   // Filter function
   const filterBySearch = (item: Friend | User) => {
     if (!searchValue.trim()) return true;
+    if (!item) return false;
 
     const searchLower = searchValue.toLowerCase();
     const nameField = "friend_name" in item ? item.friend_name : item.name;
+
+    // Add null check for nameField
+    if (!nameField) return false;
 
     return nameField.toLowerCase().includes(searchLower);
   };
@@ -112,6 +116,9 @@ export default function FriendsInbox() {
     user: Friend | User,
     type: "friend" | "pending" | "potential",
   ) => {
+    // Add null checks for all user properties
+    if (!user) return null;
+
     const isActionLoading =
       actionLoading === ("id" in user ? user.id : user.friend_id);
     const userName = "friend_name" in user ? user.friend_name : user.name;
@@ -134,7 +141,7 @@ export default function FriendsInbox() {
             {avatarUrl ? (
               <img
                 src={avatarUrl}
-                alt={userName}
+                alt={userName || "User"}
                 className="w-full h-full object-cover"
               />
             ) : (
@@ -142,9 +149,11 @@ export default function FriendsInbox() {
             )}
           </div>
           <div className="ml-3">
-            <h3 className="font-medium dark:text-gray-200">{userName}</h3>
+            <h3 className="font-medium dark:text-gray-200">
+              {userName || "Unknown User"}
+            </h3>
             <p className="text-sm text-gray-500 dark:text-gray-400">
-              {userEmail}
+              {userEmail || "No email"}
             </p>
           </div>
         </div>
@@ -223,7 +232,8 @@ export default function FriendsInbox() {
                   : "text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200"
               }`}
             >
-              Friends {friends.length > 0 && `(${friends.length})`}
+              Friends{" "}
+              {(friends || []).length > 0 && `(${(friends || []).length})`}
             </button>
             <button
               onClick={() => setActiveTab("pending")}
@@ -234,7 +244,8 @@ export default function FriendsInbox() {
               }`}
             >
               Pending{" "}
-              {pendingRequests.length > 0 && `(${pendingRequests.length})`}
+              {(pendingRequests || []).length > 0 &&
+                `(${(pendingRequests || []).length})`}
             </button>
             <button
               onClick={() => setActiveTab("discover")}
@@ -267,7 +278,8 @@ export default function FriendsInbox() {
 
         {/* Content area */}
         <div className="p-6">
-          {isLoading.friends || isLoading.requests || isLoading.potential ? (
+          {isLoading &&
+          (isLoading.friends || isLoading.requests || isLoading.potential) ? (
             <div className="py-10 text-center">
               <div className="inline-flex space-x-2 items-center">
                 <div className="w-2 h-2 bg-pink-600 rounded-full animate-bounce"></div>
@@ -295,7 +307,7 @@ export default function FriendsInbox() {
                     exit={{ opacity: 0 }}
                     className="space-y-3"
                   >
-                    {friends.filter(filterBySearch).length === 0 ? (
+                    {(friends || []).filter(filterBySearch).length === 0 ? (
                       <div className="text-center py-8">
                         <p className="text-gray-500 dark:text-gray-400">
                           No friends found
@@ -308,7 +320,7 @@ export default function FriendsInbox() {
                         </button>
                       </div>
                     ) : (
-                      friends
+                      (friends || [])
                         .filter(filterBySearch)
                         .map((friend) => renderUserCard(friend, "friend"))
                     )}
@@ -323,14 +335,15 @@ export default function FriendsInbox() {
                     exit={{ opacity: 0 }}
                     className="space-y-3"
                   >
-                    {pendingRequests.filter(filterBySearch).length === 0 ? (
+                    {(pendingRequests || []).filter(filterBySearch).length ===
+                    0 ? (
                       <div className="text-center py-8">
                         <p className="text-gray-500 dark:text-gray-400">
                           No pending requests
                         </p>
                       </div>
                     ) : (
-                      pendingRequests
+                      (pendingRequests || [])
                         .filter(filterBySearch)
                         .map((request) => renderUserCard(request, "pending"))
                     )}
@@ -345,7 +358,8 @@ export default function FriendsInbox() {
                     exit={{ opacity: 0 }}
                     className="space-y-3"
                   >
-                    {potentialFriends.filter(filterBySearch).length === 0 ? (
+                    {(potentialFriends || []).filter(filterBySearch).length ===
+                    0 ? (
                       <div className="text-center py-8">
                         <p className="text-gray-500 dark:text-gray-400">
                           No users found
@@ -358,16 +372,19 @@ export default function FriendsInbox() {
                         </button>
                       </div>
                     ) : (
-                      potentialFriends
+                      (potentialFriends || [])
                         .filter(filterBySearch)
                         .map((user) => renderUserCard(user, "potential"))
                     )}
 
-                    {potentialFriends.length > 0 && (
+                    {(potentialFriends || []).length > 0 && (
                       <div className="pt-4 text-center">
                         <button
                           onClick={() =>
-                            loadPotentialFriends(20, potentialFriends.length)
+                            loadPotentialFriends(
+                              20,
+                              (potentialFriends || []).length,
+                            )
                           }
                           className="px-4 py-2 bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-800 dark:text-gray-200 rounded-lg"
                         >
