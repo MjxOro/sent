@@ -58,7 +58,9 @@ export default function LandingContent() {
 
   // Render different components based on authentication state
   return isAuthenticated ? (
-    <Dashboard />
+    <DashboardProvider>
+      <Dashboard />
+    </DashboardProvider>
   ) : (
     <>
       <LandingPageCanvas />
