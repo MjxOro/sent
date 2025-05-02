@@ -42,13 +42,6 @@ export const useNotificationStore = create<NotificationState>()((set, get) => ({
       ...notification,
     };
 
-    // Add browser notification if allowed
-    if (Notification.permission === "granted") {
-      new Notification(newNotification.title, {
-        body: newNotification.message,
-      });
-    }
-
     set((state) => {
       const updatedNotifications = [newNotification, ...state.notifications];
       // Only keep most recent 50 notifications
