@@ -1,6 +1,6 @@
 // src/stores/websocketStore.ts
 import { create } from "zustand";
-import { useMessageStore } from "./messageStore";
+import { useMessageStore, Message } from "./messageStore";
 import { useThreadStore } from "./threadStore";
 import { useNotificationStore } from "./notificationStore";
 import { useFriendStore } from "./friendStore";
@@ -481,10 +481,18 @@ export const useSocketStore = create<SocketState>()((set, get) => ({
             console.error("Received message missing required fields:", data);
             return;
           }
-
-          console.log("Adding message to store:", data);
+          const messageObj: Message = {
+            id: data.id,
+            room_id: data.room_id,
+            user_id: data.user_id || "",
+            content: data.content,
+            created_at: data.created_at,
+            updated_at: data.updated_at,
+            user_name: data.user_name,
+            user_avatar: data.user_avatar,
+          };
           // Add received message to the store
-          useMessageStore.getState().addMessage(data);
+          useMessageStore.getState().addMessage(messageObj);
 
           // If message is not from current user and not in active thread,
           // create a notification
