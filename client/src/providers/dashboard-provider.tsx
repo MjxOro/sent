@@ -112,25 +112,19 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
   // Wrap some functions to simplify the API
   const setCurrentThread = useCallback(
     (threadId: string) => {
-      console.log(`Setting current thread to ${threadId}`);
-
-      // Unsubscribe from previous room if needed
-      if (currentThreadId && currentThreadId !== threadId) {
-        console.log(`Unsubscribing from previous room ${currentThreadId}`);
+      if (currentThreadId) {
         unsubscribeFromRoom(currentThreadId);
       }
 
-      // Set as current thread
+      // This will automatically reset the unread count because
+      // we've updated the setCurrentThread function in threadStore
       setCurrentThreadOriginal(threadId);
 
-      // Make sure we're subscribed to the new room
-      if (threadId) {
-        console.log(`Subscribing to room ${threadId}`);
-        subscribeToRoom(threadId);
+      // Subscribe to the new room
+      subscribeToRoom(threadId);
 
-        // Also load messages for this room
-        useMessageStore.getState().loadMessages(threadId, true);
-      }
+      // Reset unread count explicitly (this is now redundant but ensures it happens)
+      useThreadStore.getState().resetUnreadCount(threadId);
     },
     [
       currentThreadId,
