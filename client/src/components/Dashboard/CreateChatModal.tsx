@@ -54,7 +54,7 @@ const CreateChatModal: React.FC<CreateChatModalProps> = ({
   };
 
   // Filter friends by search query
-  const filteredFriends = friends.filter((friend) => {
+  const filteredFriends = friends?.filter((friend) => {
     if (!searchQuery.trim()) return true;
 
     const searchLower = searchQuery.toLowerCase();
