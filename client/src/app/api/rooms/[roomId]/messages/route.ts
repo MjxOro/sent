@@ -3,10 +3,9 @@ import { cookies } from "next/headers";
 
 export async function GET(
   request: NextRequest,
-  context: { params: { roomId: string } },
+  { params }: { params: { roomId: string } },
 ) {
   try {
-    const { params } = context;
     const { roomId } = params;
     const offset = request.nextUrl.searchParams.get("offset") || "0";
     const limit = request.nextUrl.searchParams.get("limit") || "20";
