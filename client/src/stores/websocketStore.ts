@@ -55,6 +55,8 @@ interface SocketState {
   // Subscription actions
   subscribeToRoom: (roomId: string) => void;
   unsubscribeFromRoom: (roomId: string) => void;
+  lastConnectedRoomId: string | null;
+  saveLastConnectedRoom: (roomId: string) => void;
 
   // Message actions
   sendMessage: (roomId: string | null, content: string) => void;
@@ -77,6 +79,13 @@ export const useSocketStore = create<SocketState>()((set, get) => ({
   typingUsers: {},
   pendingMessages: {},
   pendingThreadCreation: null,
+  lastConnectedRoomId: localStorage.getItem("lastConnectedRoomId") || null,
+  saveLastConnectedRoom: (roomId) => {
+    if (roomId) {
+      localStorage.setItem("lastConnectedRoomId", roomId);
+      set({ lastConnectedRoomId: roomId });
+    }
+  },
 
   // Connection actions
   connect: async () => {
@@ -111,58 +120,61 @@ export const useSocketStore = create<SocketState>()((set, get) => ({
       const ws = new WebSocket(wsUrl);
 
       // Setup WebSocket event handlers
-      ws.onopen = () => {
+      // Update in websocketStore.ts in the connect method
+      (ws.onopen = () => {
         console.log("WebSocket connected!");
         set({ status: "connected", instance: ws });
 
-        // Reconnect to active rooms
-        const { activeRooms } = get();
-        activeRooms.forEach((roomId) => {
-          // Re-subscribe to each room
-          const message = {
-            type: "subscribe",
-            room_id: roomId,
-          };
-          ws.send(JSON.stringify(message));
-          console.log("Resubscribed to room:", roomId);
+        // Reconnect to active rooms ONE AT A TIME with a slight delay
+        // This prevents flooding the server with subscription requests
+        const { activeRooms, lastConnectedRoomId } = get();
+
+        // If no active rooms but we have a last connected room,
+        // add it to active rooms
+        if (activeRooms.size === 0 && lastConnectedRoomId) {
+          activeRooms.add(lastConnectedRoomId);
+        }
+
+        // Convert Set to Array for easier iteration with delay
+        const roomsArray = Array.from(activeRooms);
+
+        // Subscribe to rooms with a 100ms delay between each
+        roomsArray.forEach((roomId, index) => {
+          setTimeout(() => {
+            // Check if the instance is still valid
+            if (get().instance && get().status === "connected") {
+              const message = {
+                type: "subscribe",
+                room_id: roomId,
+              };
+              get().instance?.send(JSON.stringify(message));
+              console.log("Resubscribed to room:", roomId);
+            }
+          }, index * 100); // 100ms delay between subscriptions
         });
 
         // Handle any pending messages
-        const { pendingMessages } = get();
-        Object.entries(pendingMessages).forEach(([roomId, messages]) => {
-          messages.forEach((content) => {
-            const message = {
-              type: "message",
-              room_id: roomId,
-              content,
-            };
-            ws.send(JSON.stringify(message));
-          });
+        // ... rest of the existing code
+      }),
+        (ws.onclose = (event) => {
+          console.log("WebSocket closed:", event.code, event.reason);
+
+          // Only set disconnected if we're not in error state (might be reconnecting)
+          if (get().status !== "error") {
+            set({ status: "disconnected", instance: null });
+          }
+
+          // Auto-reconnect unless this was a normal closure
+          if (event.code !== 1000) {
+            console.log(
+              "Abnormal close, attempting to reconnect in 5 seconds...",
+            );
+            setTimeout(() => {
+              console.log("Reconnecting to WebSocket...");
+              get().connect();
+            }, 5000);
+          }
         });
-
-        // Clear pending messages
-        set({ pendingMessages: {} });
-      };
-
-      ws.onclose = (event) => {
-        console.log("WebSocket closed:", event.code, event.reason);
-
-        // Only set disconnected if we're not in error state (might be reconnecting)
-        if (get().status !== "error") {
-          set({ status: "disconnected", instance: null });
-        }
-
-        // Auto-reconnect unless this was a normal closure
-        if (event.code !== 1000) {
-          console.log(
-            "Abnormal close, attempting to reconnect in 5 seconds...",
-          );
-          setTimeout(() => {
-            console.log("Reconnecting to WebSocket...");
-            get().connect();
-          }, 5000);
-        }
-      };
 
       ws.onerror = (error) => {
         console.error("WebSocket error:", error);
@@ -200,47 +212,52 @@ export const useSocketStore = create<SocketState>()((set, get) => ({
   },
 
   // Subscription actions
+  // In websocketStore.ts - update subscribeToRoom method
   subscribeToRoom: (roomId) => {
     const { instance, status, activeRooms } = get();
 
     if (!roomId) return;
 
-    console.log(`Attempting to subscribe to room ${roomId}`);
-
-    // If already subscribed, don't do it again
+    // NEW CHECK: Skip if already subscribed to this room
     if (activeRooms.has(roomId)) {
-      console.log(`Already subscribed to room ${roomId}`);
+      console.log(
+        `Already subscribed to room ${roomId}, skipping duplicate subscription`,
+      );
       return;
     }
 
-    // Create a subscribe message
+    // Add to active rooms set
+    const newActiveRooms = new Set(activeRooms);
+    newActiveRooms.add(roomId);
+    set({ activeRooms: newActiveRooms });
+
+    // Save as last connected room
+    get().saveLastConnectedRoom(roomId);
+
+    // Load messages for this room
+    useMessageStore.getState().loadMessages(roomId, true);
+
+    // If not connected, just keep in active rooms to subscribe later
+    if (status !== "connected" || !instance) {
+      if (status === "disconnected") {
+        get().connect();
+      }
+      return;
+    }
+
+    // If connected, send subscription message
+    console.log(`Subscribing to room ${roomId}`);
     const message = {
       type: "subscribe",
       room_id: roomId,
     };
 
-    // If connected, send subscription right away
-    if (status === "connected" && instance) {
-      console.log(`Sending room subscription for ${roomId}`);
-      try {
-        instance.send(JSON.stringify(message));
-      } catch (err) {
-        console.error(`Error subscribing to room ${roomId}:`, err);
-        // Will try again when connection is restored
-      }
-    } else {
-      console.log(
-        `Not connected, will subscribe to ${roomId} after reconnection`,
-      );
+    try {
+      instance.send(JSON.stringify(message));
+    } catch (err) {
+      console.error(`Error subscribing to room ${roomId}:`, err);
+      // No need for complex error handling in basic chat
     }
-
-    // Update active rooms so we know to subscribe when connection is restored
-    const newActiveRooms = new Set(activeRooms);
-    newActiveRooms.add(roomId);
-    set({ activeRooms: newActiveRooms });
-
-    // Always try to load messages for this room
-    useMessageStore.getState().loadMessages(roomId, true);
   },
 
   unsubscribeFromRoom: (roomId) => {

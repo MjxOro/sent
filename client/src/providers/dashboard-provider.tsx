@@ -59,6 +59,7 @@ const ChatContext = createContext<ChatContextType | undefined>(undefined);
 // Provider component that wraps the app
 export function DashboardProvider({ children }: { children: ReactNode }) {
   const [isInitialized, setIsInitialized] = useState(false);
+  const [hasAutoConnected, setHasAutoConnected] = useState(false); // Moved inside component
   const pathname = usePathname();
 
   // Get UI state from store
@@ -239,18 +240,94 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
     loadFriends,
   ]);
 
-  // Extract thread ID from pathname if available
+  // Auto-connect to a thread once threads are loaded
   useEffect(() => {
-    if (pathname?.startsWith("/chat/") && isInitialized) {
+    // Only run this effect once after threads are loaded and initialization
+    if (!isInitialized || !threadsLoaded || hasAutoConnected) {
+      return;
+    }
+
+    // Skip if already on a specific chat page
+    if (pathname?.startsWith("/chat/") && pathname !== "/chat/") {
+      setHasAutoConnected(true); // Mark as handled even if we skip
+      return;
+    }
+
+    console.log("Auto-connect: Running once to connect to a room");
+
+    // Function to connect to a room
+    const connectToRoom = (roomId: string) => {
+      console.log(`Auto-connect: Connecting to room ${roomId}`);
+      setCurrentThread(roomId);
+      setHasAutoConnected(true);
+    };
+
+    // Try to find last connected room from local storage
+    const lastRoomId = localStorage.getItem("lastConnectedRoomId");
+
+    if (lastRoomId) {
+      // Check if this room still exists
+      const roomExists = threadGroups.some((group) =>
+        group.threads.some((thread) => thread.id === lastRoomId),
+      );
+
+      if (roomExists) {
+        connectToRoom(lastRoomId);
+        return;
+      }
+    }
+
+    // Find most recent thread (if any)
+    if (threadGroups.length > 0 && threadGroups[0].threads.length > 0) {
+      // Just pick the first thread from the first group as a fallback
+      const firstThread = threadGroups[0].threads[0];
+      connectToRoom(firstThread.id);
+    } else {
+      // No threads found, still mark as handled
+      setHasAutoConnected(true);
+    }
+  }, [
+    isInitialized,
+    threadsLoaded,
+    hasAutoConnected,
+    pathname,
+    threadGroups,
+    setCurrentThread,
+  ]);
+
+  // Handle URL changes for chat routes
+  useEffect(() => {
+    // Skip if not initialized
+    if (!isInitialized) {
+      return;
+    }
+
+    // Only process chat URL changes
+    if (pathname?.startsWith("/chat/") && pathname !== "/chat/") {
       const threadId = pathname.replace("/chat/", "");
+
+      // Only change thread if different from current
       if (threadId && threadId !== currentThreadId) {
         console.log(`URL changed to thread ${threadId}, setting as current`);
 
-        // Set as current thread, which will handle subscription
+        // This prevents the auto-connect effect from running later
+        setHasAutoConnected(true);
+
+        // Set as current thread
         setCurrentThread(threadId);
+
+        // Store the last connected room in localStorage
+        localStorage.setItem("lastConnectedRoomId", threadId);
       }
     }
   }, [pathname, currentThreadId, setCurrentThread, isInitialized]);
+
+  // Store the current thread ID whenever it changes
+  useEffect(() => {
+    if (currentThreadId) {
+      localStorage.setItem("lastConnectedRoomId", currentThreadId);
+    }
+  }, [currentThreadId]);
 
   // Apply theme mode effect
   useEffect(() => {
