@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import Dashboard from "@/components/Dashboard";
 import { useChat } from "@/providers/dashboard-provider";
 import { useAuth } from "@/providers/auth-provider";
-import { DashboardProvider } from "@/providers/dashboard-provider";
 
 export default function NewChatPage() {
   const router = useRouter();
@@ -20,7 +19,7 @@ export default function NewChatPage() {
           // Create a new thread with default title
           const threadId = await createThread("New Chat");
           // Redirect to the new thread
-          router.push(`/dashboard/${threadId}`);
+          router.push(`/chat/${threadId}`);
         } catch (error) {
           console.error("Failed to create new chat:", error);
           router.push("/");
