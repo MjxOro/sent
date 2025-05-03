@@ -7,6 +7,7 @@ export async function middleware(request: NextRequest) {
   const accessToken = request.cookies.get("auth_token")?.value;
   const refreshToken = request.cookies.get("refresh_token")?.value;
 
+  // This can directly call api backend instead of using route
   // If we have no access token but do have a refresh token, try refreshing
   if (!accessToken && refreshToken) {
     try {
