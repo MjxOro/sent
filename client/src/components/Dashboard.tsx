@@ -2,20 +2,12 @@
 
 import { useState, useRef, useEffect } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { useChat } from "@/providers/dashboard-provider";
 import { useAuth } from "@/providers/auth-provider";
-import dynamic from "next/dynamic";
-import NotificationDropdown from "@/components/Dashboard/NotificationDropdown";
-import { useMessageStore } from "@/stores/messageStore";
-import { useSocketStore } from "@/stores/websocketStore";
-
-// Import CreateChatModal using dynamic import with ssr disabled
-const CreateChatModal = dynamic(
-  () => import("@/components/Dashboard/CreateChatModal"),
-  { ssr: false },
-);
+import CreateChatModal from "@/components/Dashboard/CreateChatModal";
 
 type DashboardProps = {
   initialChatId?: string;
@@ -61,10 +53,6 @@ const Dashboard: React.FC<DashboardProps> = ({
     sendTypingIndicator,
   } = useChat();
 
-  // Get additional functionality
-  const { markMessagesAsRead, getUnreadMessages } = useMessageStore();
-  const { markMessagesAsRead: wsMarkMessagesAsRead } = useSocketStore();
-
   // Local state
   const [message, setMessage] = useState("");
   const [hasLoadedMessages, setHasLoadedMessages] = useState(false);
@@ -74,6 +62,7 @@ const Dashboard: React.FC<DashboardProps> = ({
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const { user } = useAuth();
 
+  console.log("second", user);
   // Auto resize textarea based on content
   useEffect(() => {
     if (textareaRef.current) {
@@ -85,42 +74,19 @@ const Dashboard: React.FC<DashboardProps> = ({
 
   // Scroll to bottom on new messages
   useEffect(() => {
-    if (messagesContainerRef.current && messages.length > 0) {
-      // Always scroll to bottom when new messages arrive
-      messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    // Only auto-scroll if we're near the bottom already
+    if (messagesContainerRef.current) {
+      const container = messagesContainerRef.current;
+      const isNearBottom =
+        container.scrollHeight - container.scrollTop - container.clientHeight <
+        100;
+
+      if (isNearBottom || messages.length <= 1) {
+        messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+      }
     }
     setHasLoadedMessages(true);
   }, [messages]);
-
-  // Mark messages as read when viewing a thread
-  useEffect(() => {
-    if (!currentThreadId) return;
-
-    // Get unread messages for the current room
-    const unreadMessages = getUnreadMessages(currentThreadId);
-
-    if (unreadMessages.length > 0) {
-      // Extract message IDs
-      const messageIds = unreadMessages.map((msg) => msg.id);
-
-      // Mark messages as read
-      wsMarkMessagesAsRead(currentThreadId, messageIds);
-    }
-  }, [currentThreadId, messages, getUnreadMessages, wsMarkMessagesAsRead]);
-
-  // Handler for modal closing
-  const handleModalClose = () => {
-    setIsChatModalOpen(false);
-  };
-
-  // Handler for modal submission
-  const handleModalSubmit = (chatName: string, selectedFriends: string[]) => {
-    // Create the new room with members
-    createThread(chatName, selectedFriends).then((id) => {
-      router.push(`/chat/${id}`);
-      setIsChatModalOpen(false);
-    });
-  };
 
   // Handle sending a message
   const handleSubmit = (e: React.FormEvent) => {
@@ -256,23 +222,17 @@ const Dashboard: React.FC<DashboardProps> = ({
               </button>
             </div>
 
-            <div className="flex space-x-2">
-              {/* New Chat Button */}
-              <button
-                className="flex-1 items-center justify-center py-2 px-3 bg-pink-600 hover:bg-pink-700 text-white rounded-lg"
-                onClick={() => setIsChatModalOpen(true)}
-              >
-                <span>New Chat</span>
-              </button>
-
-              {/* Friends Button */}
-              <Link
-                href="/friends"
-                className="flex items-center justify-center py-2 px-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg"
-              >
-                <span>Friends</span>
-              </Link>
-            </div>
+            {/* New Chat Button */}
+            <Link
+              href="/chat"
+              className="flex items-center justify-center w-full py-2 px-4 bg-sent-primary hover:bg-sent-primary/80 text-white rounded-lg"
+              onClick={(e) => {
+                e.preventDefault();
+                setIsChatModalOpen(true);
+              }}
+            >
+              <span>New Chat</span>
+            </Link>
 
             {/* Search Box */}
             <div className="mt-4 relative">
@@ -310,7 +270,7 @@ const Dashboard: React.FC<DashboardProps> = ({
                         <span className="truncate text-sm dark:text-gray-300">
                           {thread.title}
                           {thread.unreadCount ? (
-                            <span className="ml-2 bg-pink-600 text-white text-xs px-1.5 py-0.5 rounded-full">
+                            <span className="ml-2 bg-sent-primary text-white text-xs px-1.5 py-0.5 rounded-full">
                               {thread.unreadCount}
                             </span>
                           ) : null}
@@ -350,16 +310,27 @@ const Dashboard: React.FC<DashboardProps> = ({
           {/* Sidebar Footer - User Profile */}
           <div className="p-4 border-t dark:border-gray-700">
             <Link
-              href="/settings"
+              href="#"
               className="flex items-center justify-between hover:bg-gray-100 dark:hover:bg-gray-700 p-2 rounded-md"
+              onClick={(e) => e.preventDefault()}
             >
               <div className="flex items-center">
-                <div className="w-8 h-8 rounded-full bg-gray-300 dark:bg-gray-600 flex items-center justify-center">
-                  😺
+                <div className="w-8 h-8 rounded-full bg-sent-secondary dark:bg-sent-secondary flex items-center justify-center overflow-hidden">
+                  {user?.avatar ? (
+                    <Image
+                      src={user.avatar}
+                      alt={user?.name || "User"}
+                      width={32}
+                      height={32}
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <span>😺</span>
+                  )}
                 </div>
                 <div className="ml-2">
                   <p className="text-sm font-medium dark:text-gray-200">
-                    {user?.name || "User Name"}
+                    {user?.name}
                   </p>
                   <p className="text-xs text-gray-500 dark:text-gray-400">
                     Free
@@ -412,22 +383,17 @@ const Dashboard: React.FC<DashboardProps> = ({
               </div>
             </div>
 
-            <div className="flex items-center space-x-3">
-              {/* Notification Bell */}
-              <NotificationDropdown />
-
-              {/* Theme Toggle */}
+            <div className="flex items-center space-x-2">
               <button
                 onClick={toggleThemeMode}
                 className="p-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300"
               >
                 {themeMode === "dark" ? "🌞" : "🌙"}
               </button>
-
-              {/* Settings Link */}
               <Link
-                href="/settings"
+                href="#"
                 className="p-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300"
+                onClick={(e) => e.preventDefault()}
               >
                 ⚙️
               </Link>
@@ -457,6 +423,12 @@ const Dashboard: React.FC<DashboardProps> = ({
               </div>
             )}
 
+            {messagesError && (
+              <div className="text-center mb-4 text-red-500 dark:text-red-400">
+                {messagesError}
+              </div>
+            )}
+
             {/* If no messages yet, show welcome screen */}
             {messages.length === 0 ? (
               <div className="h-full flex flex-col items-center justify-center">
@@ -467,7 +439,7 @@ const Dashboard: React.FC<DashboardProps> = ({
                   className="max-w-md w-full text-center space-y-6"
                 >
                   <h2 className="text-2xl font-bold dark:text-gray-200">
-                    Meow! How can Cat help you today? Nya~
+                    How can I help you today?
                   </h2>
 
                   {/* Suggestion Buttons */}
@@ -496,10 +468,10 @@ const Dashboard: React.FC<DashboardProps> = ({
                   {/* Sample Questions */}
                   <div className="space-y-2 mt-6">
                     {[
-                      "Tell Cat about your favorite game?",
-                      "How does Cat's chat system work?",
-                      "Cat wants to know about WebSockets!",
-                      "What is the meaning of life, nya?",
+                      "How does AI work?",
+                      "Are black holes real?",
+                      "Tell me about WebSockets",
+                      "What is the meaning of life?",
                     ].map((question, index) => (
                       <motion.button
                         key={index}
@@ -530,48 +502,57 @@ const Dashboard: React.FC<DashboardProps> = ({
                         }
                         exit={{ opacity: 0 }}
                         transition={{ duration: 0.3 }}
-                        className={`flex w-full ${currentUser === user?.user_id ? "justify-end" : "justify-start"} mb-4`}
+                        className={`flex w-full ${currentUser === user?.id ? "justify-end" : "justify-start"} mb-4`}
                       >
                         {/* Avatar for other users (not shown for user's own messages) */}
-                        {!isUser && !isSystem && (
-                          <div className="w-8 h-8 rounded-full bg-gray-300 dark:bg-gray-600 flex items-center justify-center mr-2 flex-shrink-0">
-                            🐱
+                        {!isUser && !isSystem && !isUser && (
+                          <div className="w-8 h-8 rounded-full bg-sent-ternary dark:bg-sent-ternary flex items-center justify-center mr-2 flex-shrink-0 overflow-hidden">
+                            {msg.user_avatar ? (
+                              <Image
+                                src={msg.user_avatar}
+                                alt={msg.user_name || "User"}
+                                width={32}
+                                height={32}
+                                className="w-full h-full object-cover"
+                              />
+                            ) : (
+                              <span>👤</span>
+                            )}
                           </div>
                         )}
 
                         <div
                           className={`max-w-[75%] rounded-lg p-3 shadow-sm ${
                             isUser
-                              ? "bg-pink-600 text-white rounded-tr-none"
+                              ? "bg-sent-primary text-white rounded-tr-none"
                               : isSystem
-                                ? "bg-gray-300 dark:bg-gray-700 text-gray-800 dark:text-gray-200 text-xs italic"
-                                : "bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 rounded-tl-none"
+                                ? "bg-sent-ternary/20 dark:bg-sent-ternary/20 text-gray-800 dark:text-gray-200 text-xs italic"
+                                : "bg-sent-ternary text-white rounded-tl-none"
                           }`}
                         >
                           <p className="whitespace-pre-wrap">{msg.content}</p>
-                          <div className="flex justify-between items-center mt-1">
-                            <span
-                              className={`text-xs ${isUser ? "text-pink-100" : "text-gray-500 dark:text-gray-400"}`}
-                            >
-                              {msg.formatted?.timestamp?.toLocaleTimeString() ||
-                                new Date(msg.created_at).toLocaleTimeString()}
-                            </span>
-
-                            {/* Read status indicator */}
-                            {isUser &&
-                              msg.read_by &&
-                              msg.read_by.length > 0 && (
-                                <span className="text-xs text-pink-100 ml-2">
-                                  ✓ Read
-                                </span>
-                              )}
+                          <div
+                            className={`mt-1 text-xs ${isUser ? "text-white/70" : "text-white/70"}`}
+                          >
+                            {msg.formatted?.timestamp?.toLocaleTimeString() ||
+                              new Date(msg.created_at).toLocaleTimeString()}
                           </div>
                         </div>
 
                         {/* Avatar for user's own messages */}
                         {isUser && (
-                          <div className="w-8 h-8 rounded-full bg-pink-500 flex items-center justify-center ml-2 flex-shrink-0">
-                            👤
+                          <div className="w-8 h-8 rounded-full bg-sent-secondary flex items-center justify-center ml-2 flex-shrink-0 overflow-hidden">
+                            {user?.avatar ? (
+                              <Image
+                                src={user.avatar}
+                                alt={user?.name || "You"}
+                                width={32}
+                                height={32}
+                                className="w-full h-full object-cover"
+                              />
+                            ) : (
+                              <span>😺</span>
+                            )}
                           </div>
                         )}
                       </motion.div>
@@ -588,7 +569,7 @@ const Dashboard: React.FC<DashboardProps> = ({
                     animate={{ opacity: 1 }}
                     className="flex justify-start mt-auto"
                   >
-                    <div className="flex items-center bg-gray-200 dark:bg-gray-700 rounded-lg p-2 text-xs text-gray-700 dark:text-gray-300">
+                    <div className="flex items-center bg-sent-ternary/20 dark:bg-sent-ternary/20 rounded-lg p-2 text-xs text-gray-700 dark:text-gray-300">
                       <span>
                         {currentRoomTypingUsers.length === 1
                           ? `${currentRoomTypingUsers[0].userName} is typing`
@@ -619,8 +600,8 @@ const Dashboard: React.FC<DashboardProps> = ({
               <div className="relative flex-1">
                 <textarea
                   ref={textareaRef}
-                  placeholder="Meow at Cat here..."
-                  className="w-full p-3 pr-12 border dark:border-gray-700 rounded-lg resize-none bg-gray-50 dark:bg-gray-900 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-pink-500"
+                  placeholder="Type your message here..."
+                  className="w-full p-3 pr-12 border dark:border-gray-700 rounded-lg resize-none bg-gray-50 dark:bg-gray-900 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-sent-primary"
                   rows={1}
                   value={message}
                   onChange={handleMessageChange}
@@ -639,7 +620,7 @@ const Dashboard: React.FC<DashboardProps> = ({
                     disabled={!message.trim() || wsStatus !== "connected"}
                     className={`ml-2 p-1 rounded-full ${
                       message.trim() && wsStatus === "connected"
-                        ? "bg-pink-600 hover:bg-pink-700 text-white"
+                        ? "bg-sent-primary hover:bg-sent-primary/80 text-white"
                         : "bg-gray-300 dark:bg-gray-700 text-gray-500 dark:text-gray-400 cursor-not-allowed"
                     }`}
                   >
@@ -649,8 +630,8 @@ const Dashboard: React.FC<DashboardProps> = ({
               </div>
 
               <div className="flex items-center text-xs text-gray-500 dark:text-gray-400">
-                <span>Cat is listening, nya~</span>
-                <span className="ml-1">🐾</span>
+                <span>Chat Mini</span>
+                <span className="ml-1">🔽</span>
               </div>
             </form>
           </div>
@@ -659,9 +640,15 @@ const Dashboard: React.FC<DashboardProps> = ({
 
       {/* Create Chat Modal */}
       <CreateChatModal
-        modalOpen={isChatModalOpen}
-        modalClose={handleModalClose}
-        modalSubmit={handleModalSubmit}
+        isOpen={isChatModalOpen}
+        onClose={() => setIsChatModalOpen(false)}
+        onSubmit={(name, selectedFriends) => {
+          // Create the new room with members
+          createThread(name, selectedFriends).then((id) => {
+            router.push(`/chat/${id}`);
+            setIsChatModalOpen(false);
+          });
+        }}
       />
     </div>
   );
