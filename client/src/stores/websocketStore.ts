@@ -92,9 +92,6 @@ export const useSocketStore = create<SocketState>()((set, get) => ({
     // If already connecting or connected, don't try again
     const currentStatus = get().status;
     if (currentStatus === "connecting" || currentStatus === "connected") {
-      console.log(
-        `Already ${currentStatus} to WebSocket, skipping connection attempt`,
-      );
       return;
     }
 
@@ -115,14 +112,11 @@ export const useSocketStore = create<SocketState>()((set, get) => ({
 
       const wsUrl = `${process.env.NEXT_PUBLIC_WS_URL || "ws://localhost:8080"}/api/ws?token=${token}`;
 
-      console.log("Connecting to WebSocket with URL:", wsUrl);
-
       const ws = new WebSocket(wsUrl);
 
       // Setup WebSocket event handlers
       // Update in websocketStore.ts in the connect method
       (ws.onopen = () => {
-        console.log("WebSocket connected!");
         set({ status: "connected", instance: ws });
 
         // Reconnect to active rooms ONE AT A TIME with a slight delay
@@ -148,7 +142,6 @@ export const useSocketStore = create<SocketState>()((set, get) => ({
                 room_id: roomId,
               };
               get().instance?.send(JSON.stringify(message));
-              console.log("Resubscribed to room:", roomId);
             }
           }, index * 100); // 100ms delay between subscriptions
         });
@@ -157,8 +150,6 @@ export const useSocketStore = create<SocketState>()((set, get) => ({
         // ... rest of the existing code
       }),
         (ws.onclose = (event) => {
-          console.log("WebSocket closed:", event.code, event.reason);
-
           // Only set disconnected if we're not in error state (might be reconnecting)
           if (get().status !== "error") {
             set({ status: "disconnected", instance: null });
@@ -182,7 +173,6 @@ export const useSocketStore = create<SocketState>()((set, get) => ({
       };
 
       ws.onmessage = (event) => {
-        console.log("WebSocket message received:", event.data);
         get()._handleMessage(event);
       };
     } catch (error) {
@@ -218,11 +208,7 @@ export const useSocketStore = create<SocketState>()((set, get) => ({
 
     if (!roomId) return;
 
-    // NEW CHECK: Skip if already subscribed to this room
     if (activeRooms.has(roomId)) {
-      console.log(
-        `Already subscribed to room ${roomId}, skipping duplicate subscription`,
-      );
       return;
     }
 
@@ -246,7 +232,6 @@ export const useSocketStore = create<SocketState>()((set, get) => ({
     }
 
     // If connected, send subscription message
-    console.log(`Subscribing to room ${roomId}`);
     const message = {
       type: "subscribe",
       room_id: roomId,
@@ -282,19 +267,10 @@ export const useSocketStore = create<SocketState>()((set, get) => ({
 
   // Message actions
   sendMessage: (roomId, content) => {
-    console.log(`Attempting to send message to room ${roomId}: ${content}`);
-
-    if (!content.trim()) {
-      console.log("Message is empty, not sending");
-      return;
-    }
-
     const { instance, status, activeRooms } = get();
-    console.log(`WebSocket status: ${status}, instance exists: ${!!instance}`);
 
     // If we don't have a current room ID, we need to create a new thread first
     if (!roomId) {
-      console.log("No roomId provided, creating a new thread");
       const title =
         content.length > 30 ? content.substring(0, 27) + "..." : content;
 
@@ -303,9 +279,6 @@ export const useSocketStore = create<SocketState>()((set, get) => ({
         pendingThreadCreation: {
           title,
           callback: (newThreadId) => {
-            console.log(
-              `Thread created with ID: ${newThreadId}, now sending message`,
-            );
             // Send message once we have the thread ID
             get().sendMessage(newThreadId, content);
           },
@@ -324,18 +297,14 @@ export const useSocketStore = create<SocketState>()((set, get) => ({
       content: content.trim(),
     };
 
-    console.log("Prepared message object:", message);
-
     // If WebSocket is connected, send through it
     if (instance && status === "connected") {
       try {
         console.log("Sending message via WebSocket...");
 
-        // FIX: Add extra safety with try-catch blocks
         let messageString;
         try {
           messageString = JSON.stringify(message);
-          console.log("Stringified message:", messageString);
         } catch (err) {
           console.error("Error stringifying message:", err);
           queueMessage(roomId, content.trim());
@@ -344,14 +313,12 @@ export const useSocketStore = create<SocketState>()((set, get) => ({
 
         // Check if websocket is still open before sending
         if (instance.readyState !== WebSocket.OPEN) {
-          console.log("WebSocket is no longer open, reconnecting...");
           queueMessage(roomId, content.trim());
           get().connect();
           return;
         }
 
         instance.send(messageString);
-        console.log("Message sent successfully");
       } catch (err) {
         console.error("Error sending message:", err);
         // Queue message if sending fails
@@ -363,9 +330,6 @@ export const useSocketStore = create<SocketState>()((set, get) => ({
         }, 1000);
       }
     } else {
-      console.log(
-        `WebSocket not connected (status: ${status}). Queueing message.`,
-      );
       queueMessage(roomId, content.trim());
       // Try to connect
       get().connect();
@@ -379,7 +343,6 @@ export const useSocketStore = create<SocketState>()((set, get) => ({
           updatedPendingMessages[roomId] = [];
         }
         updatedPendingMessages[roomId].push(content);
-        console.log(`Message queued for room ${roomId}`);
         return { pendingMessages: updatedPendingMessages };
       });
     }
@@ -443,8 +406,6 @@ export const useSocketStore = create<SocketState>()((set, get) => ({
     if (!roomId || !messageIds.length || status !== "connected" || !instance)
       return;
 
-    console.log(`Marking messages as read in room ${roomId}:`, messageIds);
-
     // Send read receipt via WebSocket
     const message: ClientMessage = {
       type: "read",
@@ -467,9 +428,7 @@ export const useSocketStore = create<SocketState>()((set, get) => ({
 
   _handleMessage: (event) => {
     try {
-      console.log("Received WebSocket message:", event.data);
       const data = JSON.parse(event.data) as ServerMessage;
-      console.log("Parsed message:", data);
 
       const { addNotification } = useNotificationStore.getState();
 
@@ -519,14 +478,6 @@ export const useSocketStore = create<SocketState>()((set, get) => ({
         case "message_sent":
           // Handle message send confirmation
           if (data.success && data.message_id && data.room_id) {
-            console.log("Message sent confirmation received:", data);
-
-            // Since messages are added by the server broadcast in the "message" case,
-            // we don't need to add a new message here. The server should broadcast
-            // the message to all clients (including the sender) after saving it.
-
-            // However, if you notice messages not appearing immediately after sending,
-            // you could fetch the latest messages for the room:
             if (data.room_id) {
               // Optionally refresh messages for this room
               useMessageStore.getState().loadMessages(data.room_id, true);
@@ -602,15 +553,6 @@ export const useSocketStore = create<SocketState>()((set, get) => ({
         case "read":
           // Handle read receipts
           if (data.room_id && data.user_id && data.message_ids) {
-            // Update message read status in the UI
-            // This is useful if you want to show read receipts for messages
-            console.log(
-              `User ${data.user_id} read messages:`,
-              data.message_ids,
-            );
-
-            // You could update individual message objects to show "read by" info
-            // For now, we'll just acknowledge it
           }
           break;
 
@@ -645,9 +587,6 @@ export const useSocketStore = create<SocketState>()((set, get) => ({
             useFriendStore.getState().loadFriends();
           }
           break;
-
-        default:
-          console.log("Unhandled message type:", data.type);
       }
     } catch (error) {
       console.error("Failed to parse WebSocket message:", error, event.data);

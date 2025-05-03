@@ -62,8 +62,6 @@ const Dashboard: React.FC<DashboardProps> = ({
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const { user } = useAuth();
 
-  console.log("second", user);
-  // Auto resize textarea based on content
   useEffect(() => {
     if (textareaRef.current) {
       textareaRef.current.style.height = "48px";
