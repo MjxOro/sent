@@ -10,7 +10,7 @@ export async function POST(
     const token = (await cookies()).get("auth_token")?.value;
     // Forward the request to your Go backend
     const response = await fetch(
-      `${process.env.SERVERURI || "http://localhost:8080"}/api/friends/accept/${friendshipId}`,
+      `${process.env.SERVER_URI || "http://localhost:8080"}/api/friends/accept/${friendshipId}`,
       {
         method: "POST",
         headers: {

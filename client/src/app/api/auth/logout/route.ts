@@ -6,7 +6,7 @@ export async function POST() {
   try {
     // Call your backend logout endpoint
     try {
-      await fetch(`${process.env.BACKEND_URL}/auth/logout`, {
+      await fetch(`${process.env.SERVER_URI}/auth/logout`, {
         method: "POST",
         credentials: "include",
         headers: {

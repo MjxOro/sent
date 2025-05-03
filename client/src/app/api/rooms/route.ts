@@ -7,7 +7,7 @@ export async function GET() {
     const token = (await cookies()).get("auth_token")?.value;
     // Forward the request to your Go backend
     const response = await fetch(
-      `${process.env.SERVERURI || "http://localhost:8080"}/api/rooms`,
+      `${process.env.SERVER_URI || "http://localhost:8080"}/api/rooms`,
       {
         method: "GET",
         headers: {

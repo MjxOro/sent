@@ -19,7 +19,7 @@ export async function POST(request: NextRequest) {
     // Send the refresh token to your backend
     // Replace with your actual backend refresh endpoint
     const response = await fetch(
-      `${process.env.SERVERURI}/api/auth/refresh_token`,
+      `${process.env.SERVER_URI}/api/auth/refresh_token`,
       {
         method: "POST",
         headers: {
