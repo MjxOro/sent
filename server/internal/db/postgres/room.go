@@ -20,10 +20,10 @@ func NewRoom(db *DB) *Room {
 }
 
 // FindByID finds a room by ID
-func (r *Room) FindByID(id string) (*model.Room, error) {
+func (r *Room) FindByID(id string) (*models.Room, error) {
 	query := `SELECT * FROM rooms WHERE id = $1`
 
-	var room model.Room
+	var room models.Room
 	err := r.db.Get(&room, query, id)
 	if err != nil {
 		return nil, err
@@ -33,7 +33,7 @@ func (r *Room) FindByID(id string) (*model.Room, error) {
 }
 
 // FindRoomsByUserID finds all rooms a user is a member of
-func (r *Room) FindRoomsByUserID(userID string) ([]*model.Room, error) {
+func (r *Room) FindRoomsByUserID(userID string) ([]*models.Room, error) {
 	query := `
 		SELECT r.* FROM rooms r
 		JOIN room_members rm ON r.id = rm.room_id
@@ -41,7 +41,7 @@ func (r *Room) FindRoomsByUserID(userID string) ([]*model.Room, error) {
 		ORDER BY r.updated_at DESC
 	`
 
-	var rooms []*model.Room
+	var rooms []*models.Room
 	err := r.db.Select(&rooms, query, userID)
 	if err != nil {
 		return nil, err
@@ -51,7 +51,7 @@ func (r *Room) FindRoomsByUserID(userID string) ([]*model.Room, error) {
 }
 
 // Create creates a new room
-func (r *Room) Create(room *model.Room) error {
+func (r *Room) Create(room *models.Room) error {
 	query := `
 		INSERT INTO rooms (name, description, creator_id, is_private, type, created_at, updated_at)
 		VALUES ($1, $2, $3, $4, $5, $6, $7)
@@ -75,7 +75,7 @@ func (r *Room) Create(room *model.Room) error {
 }
 
 // FindDMRoom finds a direct message room between two users
-func (r *Room) FindDMRoom(user1ID, user2ID string) (*model.Room, error) {
+func (r *Room) FindDMRoom(user1ID, user2ID string) (*models.Room, error) {
 	query := `
 		SELECT r.* FROM rooms r
 		JOIN room_members rm1 ON r.id = rm1.room_id
@@ -86,7 +86,7 @@ func (r *Room) FindDMRoom(user1ID, user2ID string) (*model.Room, error) {
 		LIMIT 1
 	`
 
-	var room model.Room
+	var room models.Room
 	err := r.db.Get(&room, query, user1ID, user2ID)
 	if err != nil {
 		return nil, err
@@ -118,18 +118,25 @@ func (r *Room) AddMember(roomID, userID, role string) error {
 }
 
 // GetRoomMembers gets all members of a room
-func (r *Room) GetRoomMembers(roomID string) ([]*model.User, error) {
+func (r *Room) GetRoomMembers(roomID string) ([]*models.User, error) {
 	query := `
 		SELECT u.* FROM users u
 		JOIN room_members rm ON u.id = rm.user_id
 		WHERE rm.room_id = $1
 	`
 
-	var users []*model.User
+	var users []*models.User
 	err := r.db.Select(&users, query, roomID)
 	if err != nil {
 		return nil, err
 	}
 
 	return users, nil
+}
+
+// Delete deletes a room by ID
+func (r *Room) Delete(id string) error {
+	query := `DELETE FROM rooms WHERE id = $1`
+	_, err := r.db.Exec(query, id)
+	return err
 }

@@ -42,16 +42,21 @@ func main() {
 	}
 	defer redisClient.Close()
 
+	// Initialize Redis cache
+	redisCache := redis.NewCache(redisClient)
+
 	// Initialize repositories
 	pgUser := postgres.NewUser(pgDB)
 	pgRoom := postgres.NewRoom(pgDB)
 	pgMessage := postgres.NewMessage(pgDB)
 	pgRefreshToken := postgres.NewRefreshToken(pgDB)
+	pgFriendship := postgres.NewFriendship(pgDB)
 
 	// Initialize services
 	userService := service.NewUserService(pgUser)
 	chatService := service.NewChatService(pgRoom, pgMessage, redisClient)
 	refreshTokenService := service.NewRefreshTokenService(pgRefreshToken)
+	friendshipService := service.NewFriendshipService(pgFriendship, pgUser, redisCache)
 
 	// Initialize auth services
 	oauthService := auth.NewOAuthService(cfg)
@@ -63,7 +68,8 @@ func main() {
 
 	// Initialize handlers
 	authHandler := handler.NewAuthHandler(oauthService, jwtService, userService, refreshTokenService)
-	wsHandler := handler.NewWSHandler(hub, chatService, userService)
+	wsHandler := handler.NewWSHandler(hub, chatService, userService, jwtService)
+	friendshipHandler := handler.NewFriendshipHandler(friendshipService)
 
 	// Set Gin mode
 	if os.Getenv("GIN_MODE") == "release" {
@@ -130,9 +136,10 @@ func main() {
 			protected.POST("/rooms", func(c *gin.Context) {
 				userID := c.GetString("userID")
 				var req struct {
-					Name        string `json:"name" binding:"required"`
-					Description string `json:"description"`
-					IsPrivate   bool   `json:"is_private"`
+					Name        string   `json:"name" binding:"required"`
+					Description string   `json:"description"`
+					IsPrivate   bool     `json:"is_private"`
+					MemberIDs   []string `json:"member_ids"`
 				}
 				if err := c.ShouldBindJSON(&req); err != nil {
 					c.JSON(400, gin.H{"error": err.Error()})
@@ -144,6 +151,16 @@ func main() {
 					c.JSON(500, gin.H{"error": "failed to create room"})
 					return
 				}
+
+				// Add members to the room if specified
+				if len(req.MemberIDs) > 0 {
+					for _, memberID := range req.MemberIDs {
+						if err := pgRoom.AddMember(room.ID, memberID, "member"); err != nil {
+							log.Printf("Failed to add member %s to room: %v", memberID, err)
+						}
+					}
+				}
+
 				c.JSON(201, room)
 			})
 
@@ -184,9 +201,78 @@ func main() {
 				c.JSON(200, messages)
 			})
 
-			// WebSocket route
-			protected.GET("/ws/room/:roomId", wsHandler.HandleConnection)
+			protected.DELETE("/rooms/:roomId", func(c *gin.Context) {
+				userID := c.GetString("userID")
+				roomID := c.Param("roomId")
+
+				// Check if user is a member of the room
+				isMember, err := chatService.IsUserMemberOfRoom(userID, roomID)
+				if err != nil {
+					c.JSON(500, gin.H{"error": "error checking membership"})
+					return
+				}
+
+				if !isMember {
+					c.JSON(403, gin.H{"error": "access denied"})
+					return
+				}
+
+				// Delete the room
+				if err := chatService.DeleteRoom(roomID, userID); err != nil {
+					if err.Error() == "unauthorized: only the room creator can delete this room" {
+						c.JSON(403, gin.H{"error": err.Error()})
+					} else {
+						c.JSON(500, gin.H{"error": "failed to delete room"})
+					}
+					return
+				}
+
+				c.JSON(200, gin.H{"message": "room deleted successfully"})
+			})
+			// Friendship routes
+			friendRoutes := protected.Group("/friends")
+			{
+				friendRoutes.GET("", friendshipHandler.GetFriends)
+				friendRoutes.GET("/requests", friendshipHandler.GetFriendRequests)
+				friendRoutes.GET("/relationships", friendshipHandler.GetAllRelationships)
+				friendRoutes.GET("/potential", friendshipHandler.GetPotentialFriends)
+				friendRoutes.GET("/status/:userId", friendshipHandler.GetFriendshipStatus)
+
+				friendRoutes.POST("/requests/:userId", friendshipHandler.SendFriendRequest)
+				friendRoutes.POST("/accept/:friendshipId", friendshipHandler.AcceptFriendRequest)
+				friendRoutes.POST("/reject/:friendshipId", friendshipHandler.RejectFriendRequest)
+				friendRoutes.DELETE("/:userId", friendshipHandler.RemoveFriend)
+
+				friendRoutes.POST("/block/:userId", friendshipHandler.BlockUser)
+				friendRoutes.POST("/unblock/:userId", friendshipHandler.UnblockUser)
+			}
+
+			// WebSocket endpoint - Single connection for all rooms
+			protected.GET("/ws", wsHandler.HandleConnection)
 		}
+
+		// Get room details - with auth check
+		protected.GET("/rooms/:roomId", func(c *gin.Context) {
+			userID := c.GetString("userID")
+			roomID := c.Param("roomId")
+
+			// Get room details
+			room, err := chatService.GetRoomDetails(roomID)
+			if err != nil {
+				c.JSON(404, gin.H{"error": "room not found"})
+				return
+			}
+
+			// Check if user is a member of the room
+			isMember, err := chatService.IsUserMemberOfRoom(userID, roomID)
+			if err != nil || !isMember {
+				c.JSON(403, gin.H{"error": "access denied"})
+				return
+			}
+
+			// Return room details
+			c.JSON(200, room)
+		})
 	}
 
 	// Start server

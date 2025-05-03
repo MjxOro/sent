@@ -24,21 +24,21 @@ const (
 
 // Client represents a connected WebSocket client
 type Client struct {
-	Hub  *Hub
-	Conn *websocket.Conn
-	Send chan []byte
-	ID   string
-	Room string
+	Hub   *Hub
+	Conn  *websocket.Conn
+	Send  chan []byte
+	ID    string
+	Rooms map[string]bool // Changed from a single Room string to a map of rooms
 }
 
 // NewClient creates a new WebSocket client
-func NewClient(hub *Hub, conn *websocket.Conn, id, room string) *Client {
+func NewClient(hub *Hub, conn *websocket.Conn, id string) *Client {
 	return &Client{
-		Hub:  hub,
-		Conn: conn,
-		Send: make(chan []byte, 256),
-		ID:   id,
-		Room: room,
+		Hub:   hub,
+		Conn:  conn,
+		Send:  make(chan []byte, 256),
+		ID:    id,
+		Rooms: make(map[string]bool),
 	}
 }
 
@@ -65,9 +65,10 @@ func (c *Client) ReadPump() {
 			break
 		}
 
+		// Send raw message bytes to the hub
+		// Message parsing and handling will be done in the handler
 		c.Hub.Broadcast <- &Message{
 			Data:   message,
-			Room:   c.Room,
 			Client: c,
 		}
 	}
@@ -114,4 +115,20 @@ func (c *Client) WritePump() {
 			}
 		}
 	}
+}
+
+// IsInRoom checks if client is subscribed to a room
+func (c *Client) IsInRoom(roomID string) bool {
+	_, ok := c.Rooms[roomID]
+	return ok
+}
+
+// JoinRoom adds client to a room
+func (c *Client) JoinRoom(roomID string) {
+	c.Rooms[roomID] = true
+}
+
+// LeaveRoom removes client from a room
+func (c *Client) LeaveRoom(roomID string) {
+	delete(c.Rooms, roomID)
 }

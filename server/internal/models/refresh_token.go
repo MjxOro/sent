@@ -1,5 +1,5 @@
 // internal/model/refresh_token.go
-package model
+package models
 
 import "time"
 

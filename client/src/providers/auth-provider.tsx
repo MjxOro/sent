@@ -10,14 +10,14 @@ import {
 import { useAuthStore, User } from "@/stores/authStore";
 
 // Create a context for authentication with proper types
-interface AuthContextType {
+export type AuthContextType = {
   isAuthenticated: boolean;
   isLoading: boolean;
   user: User | null;
   error: string | null;
   logout: () => Promise<void>;
   checkAuth: () => Promise<boolean>;
-}
+};
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
@@ -27,6 +27,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     useAuthStore();
   const [isInitialized, setIsInitialized] = useState(false);
 
+  const LoadingSpinner = () => (
+    <div className="fixed inset-0 flex items-center justify-center bg-white dark:bg-gray-900">
+      <div className="flex flex-col items-center">
+        <div className="w-16 h-16 border-4 border-sent-primary border-t-transparent rounded-full animate-spin"></div>
+        <p className="mt-4 text-sent-primary">Loading your experience...</p>
+      </div>
+    </div>
+  );
   // Initialize auth state on client-side only
   useEffect(() => {
     const initAuth = async () => {
@@ -42,7 +50,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (typeof window !== "undefined") {
       initAuth();
     }
-  }, [checkAuth]);
+    // }, [checkAuth]);
+  }, []);
 
   // Create the context value
   const contextValue: AuthContextType = {
@@ -54,8 +63,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     checkAuth,
   };
 
-  return (
+  const checkUser = user && user.id && user.email;
+
+  return checkUser ? (
     <AuthContext.Provider value={contextValue}>{children}</AuthContext.Provider>
+  ) : (
+    <LoadingSpinner />
   );
 }
 

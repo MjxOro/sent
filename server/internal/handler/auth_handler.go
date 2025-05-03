@@ -81,7 +81,7 @@ func (h *AuthHandler) Callback(c *gin.Context) {
 	}
 
 	// Check if user exists and create if not
-	user, err := h.userService.FindOrCreateFromOAuth(&model.User{
+	user, err := h.userService.FindOrCreateFromOAuth(&models.User{
 		OAuthID: userInfo.ID,
 		Email:   userInfo.Email,
 		Name:    userInfo.Name,
@@ -95,7 +95,7 @@ func (h *AuthHandler) Callback(c *gin.Context) {
 	}
 
 	// Generate JWT token
-	jwtToken, err := h.jwtService.GenerateToken(user.ID, user.Email, user.Name)
+	jwtToken, err := h.jwtService.GenerateToken(user.ID, user.Email, user.Name, user.Avatar)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error": "failed to generate token",
@@ -188,7 +188,7 @@ func (h *AuthHandler) RefreshToken(c *gin.Context) {
 	}
 
 	// Generate new access token
-	newAccessToken, err := h.jwtService.GenerateToken(user.ID, user.Email, user.Name)
+	newAccessToken, err := h.jwtService.GenerateToken(user.ID, user.Email, user.Name, user.Avatar)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to generate token"})
 		return

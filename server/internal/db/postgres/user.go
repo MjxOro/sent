@@ -19,9 +19,9 @@ func NewUser(db *DB) *User {
 }
 
 // FindByID finds a user by ID
-func (r *User) FindByID(id string) (*model.User, error) {
+func (r *User) FindByID(id string) (*models.User, error) {
 	query := `SELECT * FROM users WHERE id = $1`
-	var user model.User
+	var user models.User
 	err := r.db.Get(&user, query, id)
 	if err != nil {
 		return nil, err
@@ -30,9 +30,9 @@ func (r *User) FindByID(id string) (*model.User, error) {
 }
 
 // FindByEmail finds a user by email
-func (r *User) FindByEmail(email string) (*model.User, error) {
+func (r *User) FindByEmail(email string) (*models.User, error) {
 	query := `SELECT * FROM users WHERE email = $1`
-	var user model.User
+	var user models.User
 	err := r.db.Get(&user, query, email)
 	if err != nil {
 		return nil, err
@@ -41,9 +41,9 @@ func (r *User) FindByEmail(email string) (*model.User, error) {
 }
 
 // FindByOAuthID finds a user by OAuth ID and provider
-func (r *User) FindByOAuthID(oauthID string, provider string) (*model.User, error) {
+func (r *User) FindByOAuthID(oauthID string, provider string) (*models.User, error) {
 	query := `SELECT * FROM users WHERE oauth_id = $1 AND provider = $2`
-	var user model.User
+	var user models.User
 	err := r.db.Get(&user, query, oauthID, provider)
 	if err != nil {
 		return nil, err
@@ -52,7 +52,7 @@ func (r *User) FindByOAuthID(oauthID string, provider string) (*model.User, erro
 }
 
 // Create creates a new user
-func (r *User) Create(user *model.User) error {
+func (r *User) Create(user *models.User) error {
 	query := `
 		INSERT INTO users (email, name, oauth_id, provider, avatar, created_at, updated_at)
 		VALUES ($1, $2, $3, $4, $5, $6, $7)
@@ -74,7 +74,7 @@ func (r *User) Create(user *model.User) error {
 }
 
 // Update updates a user
-func (r *User) Update(user *model.User) error {
+func (r *User) Update(user *models.User) error {
 	query := `
 		UPDATE users
 		SET email = $1, name = $2, avatar = $3, updated_at = $4

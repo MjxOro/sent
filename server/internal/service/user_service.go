@@ -20,17 +20,17 @@ func NewUserService(pgUser *postgres.User) *UserService {
 }
 
 // GetByID gets a user by ID
-func (s *UserService) GetByID(id string) (*model.User, error) {
+func (s *UserService) GetByID(id string) (*models.User, error) {
 	return s.pgUser.FindByID(id)
 }
 
 // FindByEmail gets a user by email
-func (s *UserService) FindByEmail(email string) (*model.User, error) {
+func (s *UserService) FindByEmail(email string) (*models.User, error) {
 	return s.pgUser.FindByEmail(email)
 }
 
 // FindOrCreateFromOAuth finds or creates a user from OAuth data
-func (s *UserService) FindOrCreateFromOAuth(userInput *model.User, provider string) (*model.User, error) {
+func (s *UserService) FindOrCreateFromOAuth(userInput *models.User, provider string) (*models.User, error) {
 	// Try to find user by OAuth ID and provider
 	user, err := s.pgUser.FindByOAuthID(userInput.OAuthID, provider)
 	if err == nil {
@@ -51,7 +51,7 @@ func (s *UserService) FindOrCreateFromOAuth(userInput *model.User, provider stri
 		return user, nil
 	}
 	// User not found, create new one
-	user = &model.User{
+	user = &models.User{
 		Email:     userInput.Email,
 		Name:      userInput.Name,
 		OAuthID:   userInput.OAuthID,

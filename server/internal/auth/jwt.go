@@ -21,6 +21,7 @@ type TokenClaims struct {
 	UserID string `json:"user_id"`
 	Email  string `json:"email"`
 	Name   string `json:"name"`
+	Avatar string `json:"avatar"`
 	jwt.RegisteredClaims
 }
 
@@ -42,12 +43,13 @@ func NewJWTService() *JWTService {
 }
 
 // GenerateToken creates a new JWT token
-func (s *JWTService) GenerateToken(userID, email, name string) (string, error) {
+func (s *JWTService) GenerateToken(userID, email, name, avatar string) (string, error) {
 	// Create the claims
 	claims := TokenClaims{
 		UserID: userID,
 		Email:  email,
 		Name:   name,
+		Avatar: avatar,
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(s.tokenDuration)),
 			IssuedAt:  jwt.NewNumericDate(time.Now()),

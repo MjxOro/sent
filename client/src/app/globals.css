@@ -2,14 +2,34 @@
 
 /* Basic variables */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --foreground: #3a3a3a; /* Lighter than black for better readability */
+  --background: #242438; /* Slightly purple-tinted dark background */
+  --border-light: rgba(96, 72, 120, 0.15); /* Using primary color for borders */
+  --scrollbar-thumb: rgba(96, 72, 120, 0.3); /* Primary color for scrollbar */
+  --scrollbar-track: rgba(96, 72, 120, 0.05);
+  --text-muted: #604878; /* Using primary color for muted text */
+  --text-light: #906090; /* Using secondary color for light text */
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+    --background: var(--background-dark);
+    --foreground: #f0f0f0;
+    --border-light: rgba(
+      144,
+      96,
+      144,
+      0.2
+    ); /* Using secondary color for borders in dark mode */
+    --scrollbar-thumb: rgba(
+      144,
+      96,
+      144,
+      0.3
+    ); /* Secondary color for scrollbar in dark mode */
+    --scrollbar-track: rgba(144, 96, 144, 0.05);
+    --text-muted: #906090; /* Using secondary color for muted text in dark mode */
+    --text-light: #a080a0; /* Lighter version of secondary for light text in dark mode */
   }
 }
 
@@ -20,9 +40,12 @@
   --color-sent-secondary: #906090; /* vec3(0.565,0.376,0.565) */
   --color-sent-ternary: #301860;
   --color-sent-accent: #ffffff;
-
+  --color-sent-light: #a080a0; /* Lighter version of secondary */
+  --color-sent-dark: #483660; /* Darker version of primary */
+  --color-foreground: #3a3a3a; /* Lighter than black for better readability */
+  --color-background: #242438; /* Slightly purple-tinted dark background */
   /* Shadow for buttons */
-  --shadow-sent: 0 4px 14px rgba(0, 0, 0, 0.25);
+  --shadow-sent: 0 4px 14px rgba(96, 72, 120, 0.25);
 }
 
 /* Base styles */
@@ -31,5 +54,54 @@
     background: var(--background);
     color: var(--foreground);
     font-family: Arial, Helvetica, sans-serif;
+    transition:
+      background-color 0.3s ease,
+      color 0.3s ease;
   }
+
+  /* Add custom classes for our theme */
+  .bg-chat-background {
+    background-color: var(--background);
+  }
+
+  .border-chat-border {
+    border-color: var(--border-light);
+  }
+
+  .bg-sidebar {
+    background-color: var(--background);
+  }
+
+  .border-sidebar-border {
+    border-color: var(--border-light);
+  }
+
+  .hover\:bg-sidebar-accent:hover {
+    background-color: var(--color-sent-primary);
+    opacity: 0.1;
+  }
+
+  .text-sidebar-accent-foreground {
+    color: var(--foreground);
+  }
+}
+
+/* Custom scrollbar for a more modern look */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--scrollbar-track);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-sent-primary);
 }

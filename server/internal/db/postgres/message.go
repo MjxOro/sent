@@ -1,10 +1,9 @@
-// internal/db/postgres/message_repo.go
+// internal/db/postgres/message.go
 package postgres
 
 import (
-	"time"
-
 	"github.com/mjxoro/sent/server/internal/models"
+	"time"
 )
 
 // Message handles database operations for messages
@@ -20,7 +19,7 @@ func NewMessage(db *DB) *Message {
 }
 
 // Create creates a new message
-func (r *Message) Create(message *model.Message) error {
+func (r *Message) Create(message *models.Message) error {
 	query := `
 		INSERT INTO messages (room_id, user_id, content, created_at, updated_at)
 		VALUES ($1, $2, $3, $4, $5)
@@ -42,23 +41,38 @@ func (r *Message) Create(message *model.Message) error {
 }
 
 // FindByRoomID finds messages in a room with pagination
-func (r *Message) FindByRoomID(roomID string, limit, offset int) ([]*model.Message, error) {
+// Now returns MessageDTO with user information and in chronological order (oldest first)
+func (r *Message) FindByRoomID(roomID string, limit, offset int) ([]*models.MessageDTO, error) {
 	query := `
-		SELECT m.*, u.name as user_name, u.avatar as user_avatar
+		SELECT m.id, m.room_id, m.user_id, m.content, m.created_at, m.updated_at,
+		       u.name as user_name, u.avatar as user_avatar
 		FROM messages m
 		JOIN users u ON m.user_id = u.id
 		WHERE m.room_id = $1
-		ORDER BY m.created_at DESC
+		ORDER BY m.created_at ASC
 		LIMIT $2 OFFSET $3
 	`
 
-	var messages []*model.Message
+	var messages []*models.MessageDTO
 	err := r.db.Select(&messages, query, roomID, limit, offset)
 	if err != nil {
 		return nil, err
 	}
 
 	return messages, nil
+}
+
+// FindByID finds a message by ID
+func (r *Message) FindByID(id string) (*models.Message, error) {
+	query := `SELECT * FROM messages WHERE id = $1`
+
+	var message models.Message
+	err := r.db.Get(&message, query, id)
+	if err != nil {
+		return nil, err
+	}
+
+	return &message, nil
 }
 
 // MarkAsRead marks a message as read by a user
