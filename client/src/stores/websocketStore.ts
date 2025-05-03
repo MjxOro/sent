@@ -79,7 +79,7 @@ export const useSocketStore = create<SocketState>()((set, get) => ({
   typingUsers: {},
   pendingMessages: {},
   pendingThreadCreation: null,
-  lastConnectedRoomId: localStorage.getItem("lastConnectedRoomId") || null,
+  lastConnectedRoomId: null,
   saveLastConnectedRoom: (roomId) => {
     if (roomId) {
       localStorage.setItem("lastConnectedRoomId", roomId);
