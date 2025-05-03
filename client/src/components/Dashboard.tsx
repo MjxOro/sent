@@ -85,16 +85,9 @@ const Dashboard: React.FC<DashboardProps> = ({
 
   // Scroll to bottom on new messages
   useEffect(() => {
-    // Only auto-scroll if we're near the bottom already
-    if (messagesContainerRef.current) {
-      const container = messagesContainerRef.current;
-      const isNearBottom =
-        container.scrollHeight - container.scrollTop - container.clientHeight <
-        100;
-
-      if (isNearBottom || messages.length <= 1) {
-        messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-      }
+    if (messagesContainerRef.current && messages.length > 0) {
+      // Always scroll to bottom when new messages arrive
+      messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
     }
     setHasLoadedMessages(true);
   }, [messages]);
