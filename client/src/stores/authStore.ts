@@ -125,7 +125,6 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
       else if (data.user) {
         // Ensure proper field structure
         const { user_id, ...restUser } = data.user;
-        console.log(data.user);
 
         // Use the avatar from OAuth directly - no need to generate one
         // OAuth providers should always give us an avatar URL
