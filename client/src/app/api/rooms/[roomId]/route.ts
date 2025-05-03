@@ -6,7 +6,7 @@ export async function DELETE(
   { params }: { params: { roomId: string } },
 ) {
   try {
-    const { roomId } = params;
+    const { roomId } = await params;
     const token = (await cookies()).get("auth_token")?.value;
     // Forward the request to your Go backend
     const response = await fetch(

@@ -6,7 +6,7 @@ export async function GET(
   { params }: { params: { roomId: string } },
 ) {
   try {
-    const { roomId } = params;
+    const { roomId } = await params;
     const offset = request.nextUrl.searchParams.get("offset") || "0";
     const limit = request.nextUrl.searchParams.get("limit") || "20";
     const token = (await cookies()).get("auth_token")?.value;

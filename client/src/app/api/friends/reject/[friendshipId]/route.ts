@@ -6,7 +6,7 @@ export async function POST(
   { params }: { params: { friendshipId: string } },
 ) {
   try {
-    const { friendshipId } = params;
+    const { friendshipId } = await params;
     const token = (await cookies()).get("auth_token")?.value;
     // Forward the request to your Go backend
     const response = await fetch(
