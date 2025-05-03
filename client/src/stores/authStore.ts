@@ -2,20 +2,22 @@
 import { create } from "zustand";
 import { jwtVerify, JWTVerifyResult } from "jose";
 
-// Define User type
+// Define User type with proper field structure
 export interface User {
-  id: string;
+  id: string; // Changed from user_id to id
   email: string;
   name: string;
+  avatar?: string; // Optional avatar field
   roles?: string[];
-  [key: string]: any;
+  [key: string]: any; // Allow additional fields
 }
 
 // Define JWT payload structure
 interface JWTPayload {
-  sub: string;
+  sub: string; // This will become id
   email: string;
   name: string;
+  avatar?: string; // Optional avatar
   roles?: string[];
   exp: number;
   iat: number;
@@ -33,7 +35,7 @@ export interface AuthState {
   parseToken: (token: string) => Promise<User | null>;
 }
 
-// Create the store without persist middleware
+// Create the store
 export const useAuthStore = create<AuthState>()((set, get) => ({
   user: null,
   isLoading: false,
@@ -61,16 +63,23 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
         return null;
       }
 
-      // Convert JWT payload to user object
-      // Extract required properties first
-      const { sub, email, name, roles, ...restPayload } = payload;
+      // Convert JWT payload to user object with proper field structure
+      const { sub, email, name, avatar, roles, ...restPayload } = payload;
+
+      // Generate avatar URL if not present but email exists
+      const userAvatar =
+        avatar ||
+        (email
+          ? `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=random`
+          : undefined);
 
       return {
-        id: sub,
+        id: sub, // Map sub to id
         email,
         name,
+        avatar: userAvatar, // Use generated avatar if none exists
         roles: roles || [],
-        ...restPayload, // Include any additional fields without duplicating the extracted ones
+        ...restPayload, // Include any additional fields
       };
     } catch (error) {
       console.error("Failed to parse JWT token:", error);
@@ -100,15 +109,48 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
         return false;
       }
 
-      console.log("Authentication successful");
+      // If response contains a token, parse it
+      if (data.token) {
+        const user = await get().parseToken(data.token);
+        if (user) {
+          set({
+            user,
+            isAuthenticated: true,
+            isLoading: false,
+          });
+          return true;
+        }
+      }
+      // If response directly contains user data
+      else if (data.user) {
+        // Ensure proper field structure
+        const { user_id, ...restUser } = data.user;
+        console.log(data.user);
 
-      // Set the authenticated user
-      set({
-        user: data.user,
-        isAuthenticated: true,
-        isLoading: false,
-      });
-      return true;
+        // Use the avatar from OAuth directly - no need to generate one
+        // OAuth providers should always give us an avatar URL
+        const formattedUser: User = {
+          id: user_id || data.user.id, // Use user_id or id, depending on what's available
+          ...restUser,
+          avatar: data.user.avatar,
+        };
+
+        set({
+          user: formattedUser,
+          isAuthenticated: true,
+          isLoading: false,
+        });
+        return true;
+      } else {
+        set({
+          isAuthenticated: false,
+          user: null,
+          isLoading: false,
+          error: "No user data or token found in response",
+        });
+        return false;
+      }
+      return false;
     } catch (error) {
       console.error("Auth check request failed:", error);
       set({
