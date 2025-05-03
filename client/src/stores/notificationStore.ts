@@ -93,7 +93,7 @@ export const useNotificationStore = create<NotificationState>()((set, get) => ({
     try {
       const pendingRequests = useFriendStore.getState().pendingRequests;
 
-      const notificationList: Notification[] = pendingRequests.map(
+      const notificationList: Notification[] = pendingRequests?.map(
         (request) => ({
           id: `friend-req-${request.id}`,
           type: "friend_request",
