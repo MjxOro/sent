@@ -1,27 +1,25 @@
+# Caddyfile with environment variables
 {
-    # Global options
-    http_port {$HTTP_PORT}
-    https_port {$HTTPS_PORT}
+    # Enable environment variables
+    env PORT_FRONTEND PORT_BACKEND AUTO_HTTPS
+
     auto_https {$AUTO_HTTPS}
-    {$CADDY_EXTRA_CONFIG}
 }
 
-{$DOMAIN} {
-    # TLS configuration
-    {$TLS_CONFIG}
-    
-    # Frontend routes (default)
-    handle {
-        reverse_proxy frontend:{$FRONTEND_PORT}
+your.domain.com {
+    # Forward original client IP
+    reverse_proxy localhost:{$PORT_FRONTEND} {
+        header_up X-Real-IP {remote_host}
+        header_up X-Forwarded-For {remote_host}
+        header_up X-Forwarded-Proto {scheme}
     }
+}
 
-    # API routes
-    handle_path /api/* {
-        reverse_proxy backend:{$BACKEND_PORT}
-    }
-
-    # WebSocket route
-    handle /ws {
-        reverse_proxy backend:{$BACKEND_PORT}
+api.domain.com {
+    # Forward original client IP
+    reverse_proxy localhost:{$PORT_BACKEND} {
+        header_up X-Real-IP {remote_host}
+        header_up X-Forwarded-For {remote_host}
+        header_up X-Forwarded-Proto {scheme}
     }
 }
