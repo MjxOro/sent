@@ -1,0 +1,27 @@
+{
+    # Global options
+    http_port {$HTTP_PORT}
+    https_port {$HTTPS_PORT}
+    auto_https {$AUTO_HTTPS}
+    {$CADDY_EXTRA_CONFIG}
+}
+
+{$DOMAIN} {
+    # TLS configuration
+    {$TLS_CONFIG}
+    
+    # Frontend routes (default)
+    handle {
+        reverse_proxy frontend:{$FRONTEND_PORT}
+    }
+
+    # API routes
+    handle_path /api/* {
+        reverse_proxy backend:{$BACKEND_PORT}
+    }
+
+    # WebSocket route
+    handle /ws {
+        reverse_proxy backend:{$BACKEND_PORT}
+    }
+}
