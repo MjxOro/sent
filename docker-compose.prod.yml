@@ -1,0 +1,65 @@
+services:
+  frontend:
+    build:
+      context: ./client
+      dockerfile: Dockerfile
+      args:
+        NODE_ENV: production
+    ports:
+      - "${CLIENT_PORT:-3000}:3000"
+    environment:
+      - NODE_ENV=production
+      - NEXT_PUBLIC_SERVER_URI=${NEXT_PUBLIC_SERVER_URI}
+      - NEXT_PUBLIC_WS_URL=${NEXT_PUBLIC_WS_URL}
+      - SERVER_URI=${SERVER_URI}
+    env_file:
+      - ./.env
+    restart: always
+    depends_on:
+      - backend
+
+  backend:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+      args:
+        GO_ENV: production
+    ports:
+      - "${SERVER_PORT:-8080}:8080"
+    environment:
+      - GIN_MODE=release
+      - PORT=8080
+      - JWT_SECRET=${JWT_SECRET}
+      - FRONTEND_URI=${FRONTEND_URI}
+      - REDIS_HOST=redis
+      - POSTGRES_HOST=postgres
+    env_file:
+      - ./.env
+    restart: always
+    depends_on:
+      - postgres
+      - redis
+
+  postgres:
+    image: postgres:14-alpine
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_DB=${POSTGRES_DB}
+    env_file:
+      - ./.env
+    restart: always
+
+  redis:
+    image: redis:7-alpine
+    volumes:
+      - redis_data:/data
+    env_file:
+      - ./.env
+    restart: always
+
+volumes:
+  postgres_data:
+  redis_data:
