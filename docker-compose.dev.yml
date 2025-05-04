@@ -12,9 +12,6 @@ services:
       - /app/node_modules
     environment:
       - NODE_ENV=development
-      - NEXT_PUBLIC_SERVER_URI=${NEXT_PUBLIC_SERVER_URI:-http://localhost:8080}
-      - NEXT_PUBLIC_WS_URL=${NEXT_PUBLIC_WS_URL:-ws://localhost:8080}
-      - SERVER_URI=${SERVER_URI:-http://localhost:8080}
     env_file:
       - ./.env
     depends_on:
@@ -32,11 +29,6 @@ services:
       - ./server:/server
     environment:
       - GIN_MODE=debug
-      - PORT=8080
-      - JWT_SECRET=${JWT_SECRET:-secret}
-      - FRONTEND_URI=${FRONTEND_URI:-http://localhost:3000}
-      - REDIS_HOST=redis
-      - POSTGRES_HOST=postgres
     env_file:
       - ./.env
     depends_on:
@@ -47,10 +39,6 @@ services:
     image: postgres:14-alpine
     ports:
       - "${POSTGRES_PORT:-5432}:5432"
-    environment:
-      - POSTGRES_USER=${POSTGRES_USER:-postgres}
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres}
-      - POSTGRES_DB=${POSTGRES_DB:-chatapp}
     volumes:
       - postgres_data:/var/lib/postgresql/data
     env_file:
