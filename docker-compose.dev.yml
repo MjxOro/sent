@@ -1,32 +1,37 @@
 services:
   frontend:
+    user: "${UID:-1000}:${GID:-1000}"
     build:
       context: ./client
-      dockerfile: Dockerfile.dev
+      dockerfile: Dockerfile
+      args:
+        NODE_ENV: development
     ports:
-      - "3000:3000"
+      - "${CLIENT_PORT:-3000}:3000"
     volumes:
       - ./client:/app
       - /app/node_modules
     environment:
       - NODE_ENV=development
     env_file:
-      - ./client/.env
+      - ./.env
     depends_on:
       - backend
 
   backend:
     build:
       context: ./server
-      dockerfile: Dockerfile.dev
+      dockerfile: Dockerfile
+      args:
+        GO_ENV: development
     ports:
-      - "8080:8080"
+      - "${SERVER_PORT:-8080}:8080"
     volumes:
       - ./server:/server
     environment:
       - GIN_MODE=debug
     env_file:
-      - ./server/configs/.env
+      - ./.env
     depends_on:
       - postgres
       - redis
@@ -34,20 +39,20 @@ services:
   postgres:
     image: postgres:14-alpine
     ports:
-      - "5432:5432"
-    environment:
-      - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=postgres
-      - POSTGRES_DB=chatapp
+      - "${POSTGRES_PORT:-5432}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    env_file:
+      - ./.env
 
   redis:
     image: redis:7-alpine
     ports:
-      - "6379:6379"
+      - "${REDIS_PORT:-6379}:6379"
     volumes:
       - redis_data:/data
+    env_file:
+      - ./.env
 
 volumes:
   postgres_data:

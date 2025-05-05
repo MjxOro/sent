@@ -9,7 +9,7 @@ export interface User {
   name: string;
   avatar?: string; // Optional avatar field
   roles?: string[];
-  [key: string]: any; // Allow additional fields
+  [key: string]: unknown; // Allow additional fields with proper typing
 }
 
 // Define JWT payload structure
@@ -21,7 +21,23 @@ interface JWTPayload {
   roles?: string[];
   exp: number;
   iat: number;
-  [key: string]: any;
+  [key: string]: unknown; // Allow additional fields with proper typing
+}
+
+// Define API response structure
+interface AuthResponse {
+  authenticated: boolean;
+  token?: string;
+  user?: {
+    user_id?: string;
+    id?: string;
+    email: string;
+    name: string;
+    avatar?: string;
+    roles?: string[];
+    [key: string]: unknown;
+  };
+  message?: string;
 }
 
 // Define the store state and actions
@@ -98,7 +114,7 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
       });
 
       // Parse the response
-      const data = await response.json();
+      const data = (await response.json()) as AuthResponse;
 
       if (!response.ok || !data.authenticated) {
         console.log(
@@ -129,7 +145,7 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
         // Use the avatar from OAuth directly - no need to generate one
         // OAuth providers should always give us an avatar URL
         const formattedUser: User = {
-          id: user_id || data.user.id, // Use user_id or id, depending on what's available
+          id: user_id || data.user.id || "", // Use user_id or id, providing empty string as fallback
           ...restUser,
           avatar: data.user.avatar,
         };
@@ -151,7 +167,10 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
       }
       return false;
     } catch (error) {
-      console.error("Auth check request failed:", error);
+      console.error(
+        "Auth check request failed:",
+        error instanceof Error ? error.message : String(error),
+      );
       set({
         isAuthenticated: false,
         user: null,
@@ -176,7 +195,10 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
         throw new Error("Logout request failed");
       }
     } catch (error) {
-      console.error("Logout error:", error);
+      console.error(
+        "Logout error:",
+        error instanceof Error ? error.message : String(error),
+      );
       // Continue with client-side logout even if API call fails
     } finally {
       // Reset state

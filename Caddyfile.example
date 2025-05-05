@@ -1,0 +1,20 @@
+# Caddyfile with environment variables
+{
+    auto_https {$AUTO_HTTPS}
+}
+
+your.domain.com {
+    reverse_proxy frontend:{$PORT_FRONTEND} {
+        header_up X-Real-IP {remote_host}
+        header_up X-Forwarded-For {remote_host}
+        header_up X-Forwarded-Proto {scheme}
+    }
+}
+
+api.domain.com {
+    reverse_proxy backend:{$PORT_BACKEND} {
+        header_up X-Real-IP {remote_host}
+        header_up X-Forwarded-For {remote_host}
+        header_up X-Forwarded-Proto {scheme}
+    }
+}

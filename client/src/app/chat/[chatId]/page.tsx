@@ -11,12 +11,10 @@ export const metadata = {
 };
 
 // This is a server component that fetches initial data
-async function ChatPage({ params }: { params: { chatId: string } }) {
+async function ChatPage({ params }: { params: Promise<{ chatId: string }> }) {
   // You can prefetch data here for initial state
   const token = (await cookies()).get("auth_token")?.value;
-  const response = await Promise.resolve(params);
-  const { chatId } = response;
-  // Try to fetch initial messages and chat details on the server
+  const { chatId } = await params;
   let initialMessages = [];
   let chatDetails = null;
 

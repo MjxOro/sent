@@ -22,7 +22,25 @@ export interface TypingUser {
 // Message types from server
 interface ServerMessage {
   type: string;
-  [key: string]: any;
+  id?: string;
+  room_id?: string;
+  user_id?: string;
+  content?: string;
+  created_at?: string | Date;
+  updated_at?: string | Date;
+  user_name?: string;
+  user_avatar?: string;
+  message_id?: string;
+  thread_id?: string;
+  success?: boolean;
+  message?: string;
+  message_ids?: string[];
+  data?: {
+    title?: string;
+    is_typing?: boolean;
+    user_name?: string;
+  };
+  friendship_id?: string;
 }
 
 // Message types to send to server
@@ -30,8 +48,7 @@ interface ClientMessage {
   type: string;
   room_id?: string;
   content?: string;
-  data?: any;
-  [key: string]: any;
+  data?: Record<string, unknown>;
 }
 
 interface SocketState {
@@ -115,8 +132,7 @@ export const useSocketStore = create<SocketState>()((set, get) => ({
       const ws = new WebSocket(wsUrl);
 
       // Setup WebSocket event handlers
-      // Update in websocketStore.ts in the connect method
-      (ws.onopen = () => {
+      ws.onopen = () => {
         set({ status: "connected", instance: ws });
 
         // Reconnect to active rooms ONE AT A TIME with a slight delay
@@ -148,24 +164,25 @@ export const useSocketStore = create<SocketState>()((set, get) => ({
 
         // Handle any pending messages
         // ... rest of the existing code
-      }),
-        (ws.onclose = (event) => {
-          // Only set disconnected if we're not in error state (might be reconnecting)
-          if (get().status !== "error") {
-            set({ status: "disconnected", instance: null });
-          }
+      };
 
-          // Auto-reconnect unless this was a normal closure
-          if (event.code !== 1000) {
-            console.log(
-              "Abnormal close, attempting to reconnect in 5 seconds...",
-            );
-            setTimeout(() => {
-              console.log("Reconnecting to WebSocket...");
-              get().connect();
-            }, 5000);
-          }
-        });
+      ws.onclose = (event) => {
+        // Only set disconnected if we're not in error state (might be reconnecting)
+        if (get().status !== "error") {
+          set({ status: "disconnected", instance: null });
+        }
+
+        // Auto-reconnect unless this was a normal closure
+        if (event.code !== 1000) {
+          console.log(
+            "Abnormal close, attempting to reconnect in 5 seconds...",
+          );
+          setTimeout(() => {
+            console.log("Reconnecting to WebSocket...");
+            get().connect();
+          }, 5000);
+        }
+      };
 
       ws.onerror = (error) => {
         console.error("WebSocket error:", error);
@@ -202,7 +219,6 @@ export const useSocketStore = create<SocketState>()((set, get) => ({
   },
 
   // Subscription actions
-  // In websocketStore.ts - update subscribeToRoom method
   subscribeToRoom: (roomId) => {
     const { instance, status, activeRooms } = get();
 
@@ -267,7 +283,7 @@ export const useSocketStore = create<SocketState>()((set, get) => ({
 
   // Message actions
   sendMessage: (roomId, content) => {
-    const { instance, status, activeRooms } = get();
+    const { instance, status } = get();
 
     // If we don't have a current room ID, we need to create a new thread first
     if (!roomId) {
@@ -445,8 +461,8 @@ export const useSocketStore = create<SocketState>()((set, get) => ({
             room_id: data.room_id,
             user_id: data.user_id || "",
             content: data.content,
-            created_at: data.created_at,
-            updated_at: data.updated_at,
+            created_at: data.created_at as string,
+            updated_at: data.updated_at as string,
             user_name: data.user_name,
             user_avatar: data.user_avatar,
           };
@@ -489,8 +505,6 @@ export const useSocketStore = create<SocketState>()((set, get) => ({
           // Handle thread creation confirmation
           if (data.success && data.thread_id) {
             const { pendingThreadCreation } = get();
-            const threadTitle =
-              data.data?.title || pendingThreadCreation?.title || "New Chat";
 
             // Add thread to thread store
             const threadId = data.thread_id;
@@ -513,17 +527,17 @@ export const useSocketStore = create<SocketState>()((set, get) => ({
           // Handle typing indicators
           if (data.room_id && data.user_id && data.data) {
             set((state) => {
-              const roomTypers = state.typingUsers[data.room_id] || [];
+              const roomTypers = state.typingUsers[data.room_id || ""] || [];
               const typerIndex = roomTypers.findIndex(
                 (t) => t.userId === data.user_id,
               );
 
-              let updatedRoomTypers = [...roomTypers];
+              const updatedRoomTypers = [...roomTypers];
 
-              if (data.data.is_typing) {
+              if (data.data?.is_typing) {
                 // Add or update typing user
                 const typer = {
-                  userId: data.user_id,
+                  userId: data.user_id || "",
                   userName: data.data.user_name || "Unknown",
                   timestamp: Date.now(),
                 };
@@ -543,7 +557,7 @@ export const useSocketStore = create<SocketState>()((set, get) => ({
               return {
                 typingUsers: {
                   ...state.typingUsers,
-                  [data.room_id]: updatedRoomTypers,
+                  [data.room_id || ""]: updatedRoomTypers,
                 },
               };
             });
@@ -553,6 +567,7 @@ export const useSocketStore = create<SocketState>()((set, get) => ({
         case "read":
           // Handle read receipts
           if (data.room_id && data.user_id && data.message_ids) {
+            // Add implementation if needed
           }
           break;
 

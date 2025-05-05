@@ -27,14 +27,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     useAuthStore();
   const [isInitialized, setIsInitialized] = useState(false);
 
-  const LoadingSpinner = () => (
-    <div className="fixed inset-0 flex items-center justify-center bg-white dark:bg-gray-900">
-      <div className="flex flex-col items-center">
-        <div className="w-16 h-16 border-4 border-sent-primary border-t-transparent rounded-full animate-spin"></div>
-        <p className="mt-4 text-sent-primary">Loading your experience...</p>
-      </div>
-    </div>
-  );
   // Initialize auth state on client-side only
   useEffect(() => {
     const initAuth = async () => {
@@ -50,8 +42,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (typeof window !== "undefined") {
       initAuth();
     }
-    // }, [checkAuth]);
-  }, []);
+  }, [checkAuth]);
 
   // Create the context value
   const contextValue: AuthContextType = {
@@ -63,12 +54,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     checkAuth,
   };
 
-  const checkUser = user && user.id && user.email;
-
-  return checkUser ? (
+  return (
     <AuthContext.Provider value={contextValue}>{children}</AuthContext.Provider>
-  ) : (
-    <LoadingSpinner />
   );
 }
 

@@ -1,8 +1,8 @@
 "use client";
-// src/components/Dashboard/CreateChatModal.tsx
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { useFriendStore, Friend } from "@/stores/friendStore";
+import { useFriendStore } from "@/stores/friendStore";
+import Image from "next/image";
 
 // Define the props type with proper typing
 interface CreateChatModalProps {
@@ -74,7 +74,7 @@ const CreateChatModal: React.FC<CreateChatModalProps> = ({
                 />
               </div>
 
-              {friends.length > 0 && (
+              {friends?.length > 0 && (
                 <div className="mb-4">
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                     Add Friends (Optional)
@@ -92,10 +92,12 @@ const CreateChatModal: React.FC<CreateChatModalProps> = ({
                       >
                         <div className="w-8 h-8 rounded-full bg-sent-secondary flex items-center justify-center overflow-hidden mr-2">
                           {friend.friend_avatar ? (
-                            <img
+                            <Image
                               src={friend.friend_avatar}
                               alt={friend.friend_name}
-                              className="w-full h-full object-cover"
+                              width={32}
+                              height={32}
+                              className="object-cover"
                             />
                           ) : (
                             <span>👤</span>

@@ -1,0 +1,76 @@
+services:
+  caddy:
+    image: caddy:2
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ${CADDYFILE_PATH:-./Caddyfile}:/etc/caddy/Caddyfile
+      - caddy_data:/data
+      - caddy_config:/config
+    restart: unless-stopped
+    env_file: ./.env
+    depends_on:
+      - frontend
+      - backend
+
+  frontend:
+    build:
+      context: ./client
+      dockerfile: Dockerfile
+      args:
+        NODE_ENV: ${NODE_ENV:-production}
+    ports:
+      - "3000:3000"
+    volumes:
+      - frontend_build:/app/.next
+    env_file:
+      - ./.env
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+  backend:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+      args:
+        GO_ENV: ${GO_ENV:-development}
+    ports:
+      - "${PORT:-8080}:8080"
+    volumes:
+      - ./server:/server
+    env_file:
+      - ./.env
+    depends_on:
+      - postgres
+      - redis
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:14-alpine
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    env_file:
+      - ./.env
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    env_file:
+      - ./.env
+    restart: unless-stopped
+
+volumes:
+  frontend_build:
+  postgres_data:
+  redis_data:
+  caddy_data:
+  caddy_config:
