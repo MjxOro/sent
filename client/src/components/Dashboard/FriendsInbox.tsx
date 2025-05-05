@@ -2,9 +2,9 @@
 
 import { useState, useEffect } from "react";
 import { useFriendStore, Friend, User } from "@/stores/friendStore";
-import { useUIStore } from "@/stores/dashboardUIStore";
 import { motion, AnimatePresence } from "framer-motion";
 import { useNotificationStore } from "@/stores/notificationStore";
+import Image from "next/image";
 
 export default function FriendsInbox() {
   const {
@@ -119,14 +119,16 @@ export default function FriendsInbox() {
     // Add null checks for all user properties
     if (!user) return null;
 
+    // Properly handle type checking for Friend vs User
+    const isFriend = "friend_id" in user;
+
     const isActionLoading =
-      actionLoading === ("id" in user ? user.id : user.friend_id);
-    const userName = "friend_name" in user ? user.friend_name : user.name;
-    const userId = "friend_id" in user ? user.friend_id : user.id;
-    const userEmail = "friend_email" in user ? user.friend_email : user.email;
-    const avatarUrl =
-      "friend_avatar" in user ? user.friend_avatar : user.avatar;
-    const friendshipId = "id" in user ? user.id : "";
+      actionLoading === (isFriend ? user.friend_id : user.id);
+    const userName = isFriend ? user.friend_name : user.name;
+    const userId = isFriend ? user.friend_id : user.id;
+    const userEmail = isFriend ? user.friend_email : user.email;
+    const avatarUrl = isFriend ? user.friend_avatar : user.avatar;
+    const friendshipId = !isFriend ? "" : user.id;
 
     return (
       <motion.div
@@ -139,10 +141,12 @@ export default function FriendsInbox() {
         <div className="flex items-center">
           <div className="w-10 h-10 rounded-full bg-gray-300 dark:bg-gray-600 flex items-center justify-center overflow-hidden">
             {avatarUrl ? (
-              <img
+              <Image
                 src={avatarUrl}
                 alt={userName || "User"}
-                className="w-full h-full object-cover"
+                width={40}
+                height={40}
+                className="object-cover"
               />
             ) : (
               <span className="text-xl">👤</span>

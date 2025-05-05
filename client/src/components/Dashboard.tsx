@@ -9,17 +9,47 @@ import { useChat } from "@/providers/dashboard-provider";
 import { useAuth } from "@/providers/auth-provider";
 import CreateChatModal from "@/components/Dashboard/CreateChatModal";
 
+// Define proper interfaces for the types
+interface Thread {
+  id: string;
+  title: string;
+  unreadCount?: number;
+  isPinned?: boolean;
+}
+
+interface ThreadGroup {
+  id: string;
+  label: string;
+  threads: Thread[];
+}
+
+interface Message {
+  id: string;
+  content: string;
+  user_id: string;
+  user_name?: string;
+  user_avatar?: string;
+  created_at: string | Date;
+  formatted?: {
+    role: "user" | "assistant" | "system";
+    timestamp?: Date;
+  };
+}
+
+interface ChatDetails {
+  id: string;
+  name: string;
+  description?: string;
+  members?: string[];
+}
+
 type DashboardProps = {
   initialChatId?: string;
-  initialMessages?: any[];
-  chatDetails?: any;
+  initialMessages?: Message[];
+  chatDetails?: ChatDetails;
 };
 
-const Dashboard: React.FC<DashboardProps> = ({
-  initialChatId,
-  initialMessages = [],
-  chatDetails = null,
-}) => {
+const Dashboard: React.FC<DashboardProps> = () => {
   const router = useRouter();
 
   // Use our new hook to access all chat state
@@ -76,8 +106,7 @@ const Dashboard: React.FC<DashboardProps> = ({
     if (messagesContainerRef.current) {
       const container = messagesContainerRef.current;
       const isNearBottom =
-        container.scrollHeight - container.scrollTop - container.clientHeight <
-        100;
+        container.scrollHeight - container.scrollTop - container.clientHeight;
 
       if (isNearBottom || messages.length <= 1) {
         messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -190,8 +219,8 @@ const Dashboard: React.FC<DashboardProps> = ({
 
   // Get current thread info
   const currentThread = threads
-    .flatMap((g) => g.threads)
-    .find((t) => t.id === currentThreadId);
+    .flatMap((g: ThreadGroup) => g.threads)
+    .find((t: Thread) => t.id === currentThreadId);
 
   // Get typing users for current room
   const currentRoomTypingUsers = currentThreadId
@@ -249,13 +278,13 @@ const Dashboard: React.FC<DashboardProps> = ({
 
           {/* Thread Groups */}
           <div className="flex-1 overflow-y-auto p-4">
-            {threads.map((group) => (
+            {threads.map((group: ThreadGroup) => (
               <div key={group.id} className="mb-6">
                 <h3 className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-2">
                   {group.label}
                 </h3>
                 <ul>
-                  {group.threads.map((thread) => (
+                  {group.threads.map((thread: Thread) => (
                     <li key={thread.id} className="mb-1">
                       <div
                         className={`relative group flex items-center p-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer ${
@@ -487,7 +516,7 @@ const Dashboard: React.FC<DashboardProps> = ({
               <div className="flex-grow flex flex-col justify-end space-y-6">
                 {/* Messages are already in chronological order, so render them as is */}
                 <AnimatePresence>
-                  {messages.map((msg) => {
+                  {messages.map((msg: Message) => {
                     const isUser = msg.formatted?.role === "user";
                     const isSystem = msg.formatted?.role === "system";
                     const currentUser = msg.user_id;

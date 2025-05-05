@@ -19,6 +19,16 @@ export interface ThreadGroup {
   threads: Thread[];
 }
 
+// API response types
+interface RoomResponse {
+  id: string;
+  name: string;
+  description?: string;
+  is_private?: boolean;
+  updated_at: string;
+  created_at: string;
+}
+
 // Helper function to categorize threads into groups
 const categorizeThreads = (threads: Thread[]): ThreadGroup[] => {
   // Ensure threads is an array
@@ -79,7 +89,7 @@ interface ThreadState {
 
 export const useThreadStore = create<ThreadState>()(
   persist(
-    (set, get) => ({
+    (set) => ({
       // Initial state with proper empty arrays
       threads: [],
       threadGroups: [
@@ -103,12 +113,12 @@ export const useThreadStore = create<ThreadState>()(
             throw new Error("Failed to load threads");
           }
 
-          const roomsData = await response.json();
+          const roomsData = (await response.json()) as RoomResponse[];
           // Ensure roomsData is an array
           const safeRoomsData = roomsData || [];
 
           // Map rooms to threads
-          const threads: Thread[] = safeRoomsData.map((room: any) => ({
+          const threads: Thread[] = safeRoomsData.map((room) => ({
             id: room.id,
             title: room.name || "Unnamed Chat",
             isPinned: false, // We'll store pinned status locally
@@ -159,7 +169,7 @@ export const useThreadStore = create<ThreadState>()(
             throw new Error("Failed to create thread");
           }
 
-          const newRoom = await response.json();
+          const newRoom = (await response.json()) as RoomResponse;
 
           // Add the new thread to state
           const newThread: Thread = {

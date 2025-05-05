@@ -1,5 +1,4 @@
-FROM node:18-alpine
-
+FROM node:20.14-alpine
 WORKDIR /app
 
 # Set default build arg (will be overridden by docker-compose)
@@ -18,9 +17,12 @@ RUN if [ "$NODE_ENV" = "production" ]; then \
 # Copy the rest of the code
 COPY . .
 
+# Create .next directory with proper permissions
+RUN mkdir -p .next && chmod -R 777 .next
+
 # Build the app for production if needed
 RUN if [ "$NODE_ENV" = "production" ]; then \
-      npm run build; \
+      NODE_ENV=production npm run build; \
     fi
 
 # Expose port

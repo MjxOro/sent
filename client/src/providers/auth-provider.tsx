@@ -42,8 +42,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (typeof window !== "undefined") {
       initAuth();
     }
-    // }, [checkAuth]);
-  }, []);
+  }, [checkAuth]);
 
   // Create the context value
   const contextValue: AuthContextType = {

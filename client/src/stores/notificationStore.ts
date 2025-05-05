@@ -1,6 +1,5 @@
 // src/stores/notificationStore.ts
 import { create } from "zustand";
-import { useAuthStore } from "./authStore";
 import { useFriendStore } from "./friendStore";
 
 export interface Notification {
@@ -28,7 +27,7 @@ interface NotificationState {
   loadNotifications: () => Promise<void>;
 }
 
-export const useNotificationStore = create<NotificationState>()((set, get) => ({
+export const useNotificationStore = create<NotificationState>()((set) => ({
   // Initial state
   notifications: [],
   unreadCount: 0,

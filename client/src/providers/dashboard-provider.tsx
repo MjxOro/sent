@@ -12,7 +12,7 @@ import { usePathname } from "next/navigation";
 
 // Import all stores
 import { useUIStore } from "@/stores/dashboardUIStore";
-import { useThreadStore, ThreadGroup, Thread } from "@/stores/threadStore";
+import { useThreadStore, ThreadGroup } from "@/stores/threadStore";
 import { useMessageStore, Message } from "@/stores/messageStore";
 import {
   useSocketStore,
@@ -88,7 +88,6 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
   const {
     messages: allMessages,
     messageLoadInfo,
-    loadMessages,
     loadMoreMessages,
   } = useMessageStore();
 

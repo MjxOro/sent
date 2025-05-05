@@ -6,6 +6,17 @@ import { useNotificationStore } from "@/stores/notificationStore";
 import { useRouter } from "next/navigation";
 import { useFriendStore } from "@/stores/friendStore";
 
+// Define a proper type for notifications
+interface Notification {
+  id: string;
+  type: "message" | "friend_request" | "system";
+  title: string;
+  message: string;
+  sourceId?: string;
+  isRead: boolean;
+  timestamp: Date;
+}
+
 export default function NotificationDropdown() {
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -48,7 +59,7 @@ export default function NotificationDropdown() {
     }
   }, []);
 
-  const handleNotificationClick = (notification: any) => {
+  const handleNotificationClick = (notification: Notification) => {
     markAsRead(notification.id);
 
     // Navigate based on notification type
@@ -59,7 +70,7 @@ export default function NotificationDropdown() {
   };
 
   const handleFriendAction = async (
-    notification: any,
+    notification: Notification,
     action: "accept" | "reject",
   ) => {
     if (notification.type === "friend_request" && notification.sourceId) {
@@ -148,7 +159,7 @@ export default function NotificationDropdown() {
                   <p>No notifications</p>
                 </div>
               ) : (
-                notifications.map((notification) => (
+                (notifications as Notification[]).map((notification) => (
                   <div
                     key={notification.id}
                     className={`p-3 border-b dark:border-gray-700 last:border-b-0 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors ${!notification.isRead ? "bg-blue-50 dark:bg-blue-900/20" : ""}`}
