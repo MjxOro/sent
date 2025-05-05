@@ -15,7 +15,6 @@ services:
       - backend
 
   frontend:
-    user: "${UID:-1000}:${GID:-1000}"
     build:
       context: ./client
       dockerfile: Dockerfile

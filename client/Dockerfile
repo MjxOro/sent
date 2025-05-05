@@ -1,40 +1,45 @@
-FROM node:20.14-alpine
+FROM node:22.14-alpine
 WORKDIR /app
-
-# Set default build arg (will be overridden by docker-compose)
+ 
+# Set default build arg
 ARG NODE_ENV=production
-
-# Copy package files first for better layer caching
+ 
+# Create directories with full permissions
+RUN mkdir -p /app/.next/static/development && \
+    mkdir -p /app/.next/static/chunks && \
+    mkdir -p /app/.next/server && \
+    mkdir -p /app/.next/cache && \
+    chmod -R 777 /app && \
+    chmod -R 777 /app/.next
+ 
+# Copy package files first for better caching
 COPY package.json package-lock.json* ./
-
-# Install dependencies based on environment with retries
-RUN if [ "$NODE_ENV" = "production" ]; then \
-      npm ci --prefer-offline --no-audit --no-fund --progress=false || npm ci --prefer-offline --no-audit --no-fund --progress=false || npm ci; \
-    else \
-      npm install --prefer-offline --no-audit --no-fund --progress=false || npm install --prefer-offline --no-audit --no-fund --progress=false || npm install; \
-    fi
+  
+# Install ALL dependencies (including dev)
+RUN npm i --prefer-offline --no-audit --include=dev
 
 # Copy the rest of the code
 COPY . .
-
-# Create .next directory with proper permissions
-RUN mkdir -p .next && chmod -R 777 .next
-
-# Build the app for production if needed
+ 
+# Ensure permissions again after copy
+RUN chmod -R 777 /app && \
+    chmod -R 777 /app/.next
+ 
+# Build the app if in production mode
 RUN if [ "$NODE_ENV" = "production" ]; then \
-      NODE_ENV=production npm run build; \
+      npm run build; \
     fi
-
+ 
 # Expose port
 EXPOSE 3000
-
+ 
 # Set hostname to bind to all interfaces
 ENV HOSTNAME=0.0.0.0
 ENV NEXT_TELEMETRY_DISABLED=1
-
-# Run the appropriate command based on environment
+ 
+# Run the app
 CMD if [ "$NODE_ENV" = "production" ]; then \
       npm start; \
     else \
-      npm run dev -- -H 0.0.0.0; \
+      chmod -R 777 /app && npm run dev -- -H 0.0.0.0; \
     fi
