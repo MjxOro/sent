@@ -3,12 +3,11 @@ import { cookies } from "next/headers";
 
 export async function POST(
   _: NextRequest,
-  { params }: { params: { userId: string } },
+  { params }: { params: Promise<{ userId: string }> },
 ) {
   try {
     const { userId } = await params;
     const token = (await cookies()).get("auth_token")?.value;
-    // Forward the request to your Go backend
     const response = await fetch(
       `${process.env.SERVER_URI || "http://localhost:8080"}/api/friends/requests/${userId}`,
       {
@@ -22,11 +21,10 @@ export async function POST(
 
     const data = await response.json();
 
-    // Return the response from your Go backend
     return NextResponse.json(data);
   } catch (error) {
     return NextResponse.json(
-      { error: "Failed to send friend request" },
+      { error: `Failed to send friend request: ${error}` },
       { status: 500 },
     );
   }

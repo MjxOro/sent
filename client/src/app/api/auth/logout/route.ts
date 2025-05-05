@@ -4,7 +4,6 @@ import { cookies } from "next/headers";
 
 export async function POST() {
   try {
-    // Call your backend logout endpoint
     try {
       await fetch(`${process.env.SERVER_URI}/auth/logout`, {
         method: "POST",
@@ -18,7 +17,6 @@ export async function POST() {
       // Continue with local cookie clearing even if backend call fails
     }
 
-    // Create response
     const response = NextResponse.json(
       { success: true, message: "Logged out successfully" },
       { status: 200 },
