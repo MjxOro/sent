@@ -20,6 +20,8 @@ services:
       dockerfile: Dockerfile
       args:
         NODE_ENV: ${NODE_ENV:-production}
+        NEXT_PUBLIC_SERVER_URI: ${NEXT_PUBLIC_SERVER_URI}
+        NEXT_PUBLIC_WS_URL: ${NEXT_PUBLIC_WS_URL}
     ports:
       - "3000:3000"
     volumes:
@@ -35,7 +37,7 @@ services:
       context: ./server
       dockerfile: Dockerfile
       args:
-        GO_ENV: ${GO_ENV:-development}
+        GO_ENV: ${GO_ENV:-production}
     ports:
       - "${PORT:-8080}:8080"
     volumes:

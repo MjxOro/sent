@@ -1,45 +1,45 @@
+# Use a lightweight Node.js image
 FROM node:22.14-alpine
+
+# Set working directory
 WORKDIR /app
- 
+
 # Set default build arg
 ARG NODE_ENV=production
- 
-# Create directories with full permissions
-RUN mkdir -p /app/.next/static/development && \
-    mkdir -p /app/.next/static/chunks && \
-    mkdir -p /app/.next/server && \
-    mkdir -p /app/.next/cache && \
-    chmod -R 777 /app && \
-    chmod -R 777 /app/.next
- 
-# Copy package files first for better caching
-COPY package.json package-lock.json* ./
-  
-# Install ALL dependencies (including dev)
-RUN npm i --prefer-offline --no-audit --include=dev
+ENV NODE_ENV=${NODE_ENV}
+ENV NEXT_TELEMETRY_DISABLED=1
 
-# Copy the rest of the code
+# Copy package.json and package-lock.json first for better caching
+COPY package*.json ./
+
+# Install dependencies (include dev dependencies regardless of environment)
+RUN npm ci --include=dev --prefer-offline
+
+# Copy the rest of the application files
 COPY . .
- 
-# Ensure permissions again after copy
-RUN chmod -R 777 /app && \
-    chmod -R 777 /app/.next
- 
-# Build the app if in production mode
+
+# Create .next directory with proper permissions
+RUN mkdir -p .next/cache .next/server .next/static && chmod -R 777 .next
+
+# Build the application if in production mode
 RUN if [ "$NODE_ENV" = "production" ]; then \
       npm run build; \
     fi
- 
-# Expose port
+
+# Use a non-root user for security
+RUN addgroup -S nextjs && adduser -S nextjs -G nextjs
+RUN chown -R nextjs:nextjs /app
+USER nextjs
+
+# Expose the port
 EXPOSE 3000
- 
+
 # Set hostname to bind to all interfaces
 ENV HOSTNAME=0.0.0.0
-ENV NEXT_TELEMETRY_DISABLED=1
- 
-# Run the app
+
+# Set the command based on environment
 CMD if [ "$NODE_ENV" = "production" ]; then \
       npm start; \
     else \
-      chmod -R 777 /app && npm run dev -- -H 0.0.0.0; \
+      npm run dev; \
     fi
