@@ -1,6 +1,5 @@
 FROM golang:latest
-
-# Set destination for COPY
+# Set# Set destination for COPY
 WORKDIR /app
 
 # Set build argument for environment

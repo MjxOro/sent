@@ -6,7 +6,12 @@ WORKDIR /app
 
 # Set default build arg
 ARG NODE_ENV=production
+ARG NEXT_PUBLIC_SERVER_URI
+ARG NEXT_PUBLIC_WS_URL
+
 ENV NODE_ENV=${NODE_ENV}
+ENV NEXT_PUBLIC_SERVER_URI=${NEXT_PUBLIC_SERVER_URI}
+ENV NEXT_PUBLIC_WS_URL=${NEXT_PUBLIC_WS_URL}
 ENV NEXT_TELEMETRY_DISABLED=1
 
 # Copy package.json and package-lock.json first for better caching
@@ -43,3 +48,4 @@ CMD if [ "$NODE_ENV" = "production" ]; then \
     else \
       npm run dev; \
     fi
+
