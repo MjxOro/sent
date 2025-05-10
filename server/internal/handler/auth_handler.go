@@ -122,26 +122,27 @@ func (h *AuthHandler) Callback(c *gin.Context) {
 		return
 	}
 
-	// Set access token cookie
+	cookieDomain := os.Getenv("COOKIE_DOMAIN")
+	secureFlag := os.Getenv("COOKIE_SECURE") == "true"
+
 	c.SetCookie(
-		"auth_token", // name
-		jwtToken,     // value
+		"auth_token",
+		jwtToken,
 		3600*24,      // max age (24 hours)
 		"/",          // path
-		"",           // domain
-		true,         // secure
+		cookieDomain, // domain from environment
+		secureFlag,   // secure flag from environment
 		true,         // HTTP only
 	)
 
-	// Set refresh token cookie
 	c.SetCookie(
-		"refresh_token", // name
-		refreshToken,    // value
-		3600*24*30,      // max age (30 days)
-		"/",             // path
-		"",              // domain
-		true,            // secure
-		true,            // HTTP only
+		"refresh_token",
+		refreshToken,
+		3600*24*30,   // max age (30 days)
+		"/",          // path
+		cookieDomain, // domain from environment
+		secureFlag,   // secure flag from environment
+		true,         // HTTP only
 	)
 
 	// Redirect to frontend
