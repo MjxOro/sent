@@ -13,12 +13,12 @@ RUN mkdir -p tmp
 RUN if [ "$GO_ENV" = "development" ]; then \
       go install github.com/air-verse/air@latest; \
     fi
+COPY . .
 # Build for production
 RUN if [ "$GO_ENV" = "production" ]; then \
       CGO_ENABLED=0 GOOS=linux go build -o /app-binary ./cmd/api/main.go; \
     fi
 # Document port
-COPY . .
 EXPOSE 8080
 # Set environment variable for binding address
 ENV GIN_HOST=0.0.0.0
