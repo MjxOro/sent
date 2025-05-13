@@ -418,6 +418,12 @@ const Dashboard: React.FC<DashboardProps> = () => {
                 {themeMode === "dark" ? "🌞" : "🌙"}
               </button>
               <Link
+                href="/friends"
+                className="p-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300"
+              >
+                👥
+              </Link>
+              <Link
                 href="#"
                 className="p-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300"
                 onClick={(e) => e.preventDefault()}
