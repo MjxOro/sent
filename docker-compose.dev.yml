@@ -7,10 +7,12 @@ services:
         NODE_ENV: ${NODE_ENV:-development}
         NEXT_PUBLIC_SERVER_URI: ${NEXT_PUBLIC_SERVER_URI}
         NEXT_PUBLIC_WS_URL: ${NEXT_PUBLIC_WS_URL}
+    user: "root"
     ports:
       - "3000:3000"
     volumes:
-      - frontend_build:/app/.next
+      - ./client:/app:rw,z
+      - /app/node_modules
     env_file:
       - ./.env
     depends_on:
