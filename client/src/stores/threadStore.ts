@@ -157,6 +157,7 @@ export const useThreadStore = create<ThreadState>()(
             headers: {
               "Content-Type": "application/json",
             },
+            credentials: 'include',
             body: JSON.stringify({
               name: title,
               description: "",
