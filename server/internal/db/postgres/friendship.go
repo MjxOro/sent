@@ -72,21 +72,25 @@ func (r *Friendship) FindByUserAndFriend(userID, friendID string) (*models.Frien
 
 // FindFriendsByUserID finds all friends of a user with specified status
 func (r *Friendship) FindFriendsByUserID(userID string, status models.FriendshipStatus) ([]*models.FriendshipWithUser, error) {
-	query := `
-		SELECT 
-			f.id, f.user_id, f.friend_id, f.status, f.created_at, f.updated_at,
-			u.name as friend_name, u.email as friend_email, u.avatar as friend_avatar
-		FROM friendships f
-		JOIN users u ON (
-			CASE 
-				WHEN f.user_id = $1 THEN f.friend_id = u.id
-				WHEN f.friend_id = $1 THEN f.user_id = u.id
-			END
-		)
-		WHERE (f.user_id = $1 OR f.friend_id = $1) AND f.status = $2
-		ORDER BY u.name ASC
-	`
-
+query := `
+    SELECT 
+        f.id, 
+        CASE 
+            WHEN f.user_id = $1 THEN f.friend_id
+            ELSE f.user_id
+        END as friend_id,
+        f.status, f.created_at, f.updated_at,
+        u.name as friend_name, u.email as friend_email, u.avatar as friend_avatar
+    FROM friendships f
+    JOIN users u ON (
+        CASE 
+            WHEN f.user_id = $1 THEN f.friend_id = u.id
+            WHEN f.friend_id = $1 THEN f.user_id = u.id
+        END
+    )
+    WHERE (f.user_id = $1 OR f.friend_id = $1) AND f.status = $2
+    ORDER BY u.name ASC
+`
 	var friends []*models.FriendshipWithUser
 	err := r.db.Select(&friends, query, userID, status)
 	if err != nil {
