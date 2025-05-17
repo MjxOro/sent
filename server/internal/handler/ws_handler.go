@@ -106,6 +106,12 @@ func (h *WSHandler) HandleConnection(c *gin.Context) {
 
 	// Create client and register with hub
 	client := websocket.NewClient(h.hub, conn, userID)
+
+	defer func() {
+		log.Printf("Cleaning up connection for user: %s", userID)
+		h.hub.Unregister <- client
+		client.Close()
+	}()
 	h.hub.Register <- client
 
 	// Log the successful connection
@@ -113,8 +119,9 @@ func (h *WSHandler) HandleConnection(c *gin.Context) {
 
 	// Start server-side goroutines
 	go h.notifications.HandleUserNotifications(client, userID)
-	go h.handleMessages(client, user)
 	go client.WritePump()
+
+	h.handleMessages(client, user)
 }
 
 // handleMessages handles incoming messages from a client

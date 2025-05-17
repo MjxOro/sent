@@ -38,36 +38,49 @@ func (h *NotificationHandler) HandleUserNotifications(client *websocket.Client, 
 	channel := fmt.Sprintf("user:notify:%s", userID)
 	fmt.Printf("Subscribing to notification channel: %s\n", channel)
 
-	// Create a done channel to signal when to stop
+	// Create a done channel for clean shutdown
 	done := make(chan struct{})
-
-	// Cleanup when the function returns
 	defer close(done)
 
-	// Start subscription in a separate goroutine
+	// Use a separate error channel
+	errChan := make(chan error, 1)
+
+	// Start subscription in a goroutine
 	go func() {
 		h.redisPubSub.Subscribe(channel, func(message []byte) {
-			// Check if we should stop
+			// Check if client is still valid
+			if client == nil {
+				errChan <- fmt.Errorf("client is nil")
+				return
+			}
+
 			select {
 			case <-done:
 				return
 			default:
-				// Try to send the message if client is still valid
-				if client != nil && client.Send != nil {
-					select {
-					case client.Send <- message:
-						fmt.Printf("Sent notification to user %s\n", userID)
-					default:
-						fmt.Printf("Failed to send notification: channel full or closed\n")
-						return
-					}
+				// Try to send the message
+				select {
+				case client.Send <- message:
+					fmt.Printf("Sent notification to user %s\n", userID)
+				case <-client.Done:
+					// Client disconnected
+					return
+				default:
+					// Channel is full or closed
+					fmt.Printf("Failed to send notification: channel full or closed\n")
+					return
 				}
 			}
-		})
+		}, done)
 	}()
 
-	// Wait for client to disconnect
-	<-client.Done()
+	// Wait for either client disconnect or error
+	select {
+	case <-client.Done:
+		fmt.Printf("Client %s disconnected, stopping notification handler\n", userID)
+	case err := <-errChan:
+		fmt.Printf("Error in notification handler for user %s: %v\n", userID, err)
+	}
 }
 
 // Add method to send notifications

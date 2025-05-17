@@ -35,7 +35,7 @@ func (ps *PubSub) PublishMessage(channel string, message interface{}) error {
 }
 
 // Subscribe subscribes to a channel and handles incoming messages
-func (ps *PubSub) Subscribe(channel string, handler func([]byte)) {
+func (ps *PubSub) Subscribe(channel string, handler func([]byte), done chan struct{}) {
 	ctx := context.Background()
 
 	// Subscribe to the channel
@@ -45,10 +45,17 @@ func (ps *PubSub) Subscribe(channel string, handler func([]byte)) {
 	// Listen for messages
 	ch := pubsub.Channel()
 
-	fmt.Printf("Subscribed to Redis channel: %s", channel)
+	fmt.Printf("Subscribed to Redis channel: %s\n", channel)
 
-	for msg := range ch {
-		handler([]byte(msg.Payload))
+	for {
+		select {
+		case <-done:
+			return
+		case msg := <-ch:
+			if msg != nil {
+				handler([]byte(msg.Payload))
+			}
+		}
 	}
 }
 
