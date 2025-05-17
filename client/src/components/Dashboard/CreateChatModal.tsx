@@ -38,6 +38,7 @@ const CreateChatModal: React.FC<CreateChatModalProps> = ({
   };
 
   const toggleFriendSelection = (friendId: string) => {
+    console.log(friendId);
     setSelectedFriends((prev) =>
       prev.includes(friendId)
         ? prev.filter((id) => id !== friendId)

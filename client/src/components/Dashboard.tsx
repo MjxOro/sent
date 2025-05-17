@@ -8,6 +8,8 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useChat } from "@/providers/dashboard-provider";
 import { useAuth } from "@/providers/auth-provider";
 import CreateChatModal from "@/components/Dashboard/CreateChatModal";
+import NotificationWrapper from "@/components/Dashboard/NotificationWrapper";
+import ChatInboxButton from "./Dashboard/ChatInboxButton";
 
 // Define proper interfaces for the types
 interface Thread {
@@ -411,18 +413,17 @@ const Dashboard: React.FC<DashboardProps> = () => {
             </div>
 
             <div className="flex items-center space-x-2">
-              <button
-                onClick={toggleThemeMode}
-                className="p-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300"
-              >
-                {themeMode === "dark" ? "🌞" : "🌙"}
-              </button>
-              <Link
-                href="/friends"
-                className="p-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300"
-              >
-                👥
-              </Link>
+              <NotificationWrapper type="chat_invite">
+                <ChatInboxButton />
+              </NotificationWrapper>
+              <NotificationWrapper type="friend_request">
+                <Link
+                  href="/friends"
+                  className="p-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300"
+                >
+                  👥
+                </Link>
+              </NotificationWrapper>
               <Link
                 href="#"
                 className="p-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300"
