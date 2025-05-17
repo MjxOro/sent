@@ -11,6 +11,13 @@ import (
 type Room struct {
 	db *DB
 }
+type RoomMemberStatus string
+
+const (
+	RoomMemberStatusPending  RoomMemberStatus = "pending"
+	RoomMemberStatusJoined   RoomMemberStatus = "joined"
+	RoomMemberStatusDeclined RoomMemberStatus = "declined"
+)
 
 // NewRoom creates a new room repository
 func NewRoom(db *DB) *Room {
@@ -35,12 +42,11 @@ func (r *Room) FindByID(id string) (*models.Room, error) {
 // FindRoomsByUserID finds all rooms a user is a member of
 func (r *Room) FindRoomsByUserID(userID string) ([]*models.Room, error) {
 	query := `
-		SELECT r.* FROM rooms r
-		JOIN room_members rm ON r.id = rm.room_id
-		WHERE rm.user_id = $1
-		ORDER BY r.updated_at DESC
+    SELECT r.* FROM rooms r
+    JOIN room_members rm ON r.id = rm.room_id
+    WHERE rm.user_id = $1 AND rm.status = 'joined'
+    ORDER BY r.updated_at DESC
 	`
-
 	var rooms []*models.Room
 	err := r.db.Select(&rooms, query, userID)
 	if err != nil {
@@ -96,24 +102,51 @@ func (r *Room) FindDMRoom(user1ID, user2ID string) (*models.Room, error) {
 }
 
 // AddMember adds a user to a room
-func (r *Room) AddMember(roomID, userID, role string) error {
+func (r *Room) AddMember(roomID, userID, role string, isCreator bool) error {
 	query := `
-		INSERT INTO room_members (room_id, user_id, role, joined_at, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6)
-	`
+        INSERT INTO room_members (
+            room_id, 
+            user_id, 
+            role, 
+            status,
+            joined_at, 
+            created_at, 
+            updated_at
+        )
+        VALUES ($1, $2, $3, $4, $5, NOW(), NOW())
+    `
 
 	now := time.Now()
+	status := RoomMemberStatusPending
+	if isCreator {
+		status = RoomMemberStatusJoined
+	}
 
 	_, err := r.db.Exec(
 		query,
 		roomID,
 		userID,
 		role,
-		now,
-		now,
+		status,
 		now,
 	)
+	return err
+}
 
+// UpdateMemberStatus updates a member's status in a room
+func (r *Room) UpdateMemberStatus(roomID, userID string, status RoomMemberStatus) error {
+	query := `
+        UPDATE room_members 
+        SET status = $1,
+            joined_at = CASE 
+                WHEN $1 = 'joined' THEN NOW() 
+                ELSE joined_at 
+            END,
+            updated_at = NOW()
+        WHERE room_id = $2 AND user_id = $3
+    `
+
+	_, err := r.db.Exec(query, status, roomID, userID)
 	return err
 }
 

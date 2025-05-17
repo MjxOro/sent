@@ -40,7 +40,7 @@ func (s *ChatService) CreateRoom(name, description string, isPrivate bool, creat
 	}
 
 	// Add creator as member with admin role
-	if err := s.pgRoom.AddMember(room.ID, creatorID, "admin"); err != nil {
+	if err := s.pgRoom.AddMember(room.ID, creatorID, "admin", true); err != nil {
 		return nil, err
 	}
 
@@ -69,10 +69,10 @@ func (s *ChatService) CreateDirectMessageRoom(user1ID, user2ID string) (*models.
 	}
 
 	// Add both users as members
-	if err := s.pgRoom.AddMember(room.ID, user1ID, "member"); err != nil {
+	if err := s.pgRoom.AddMember(room.ID, user1ID, "member", true); err != nil {
 		return nil, err
 	}
-	if err := s.pgRoom.AddMember(room.ID, user2ID, "member"); err != nil {
+	if err := s.pgRoom.AddMember(room.ID, user2ID, "member", false); err != nil {
 		return nil, err
 	}
 

@@ -126,6 +126,7 @@ func main() {
 
 			// Room routes
 			protected.GET("/rooms", func(c *gin.Context) {
+				fmt.Println("test")
 				userID := c.GetString("userID")
 				rooms, err := chatService.GetUserRooms(userID)
 				if err != nil {
@@ -157,13 +158,55 @@ func main() {
 				// Add members to the room if specified
 				if len(req.MemberIDs) > 0 {
 					for _, memberID := range req.MemberIDs {
-						if err := pgRoom.AddMember(room.ID, memberID, "member"); err != nil {
-							log.Printf("Failed to add member %s to room: %v", memberID, err)
+						if err := pgRoom.AddMember(room.ID, memberID, "member", false); err != nil {
+							fmt.Printf("Failed to add member %s to room: %v", memberID, err)
+							continue
+						}
+						fmt.Printf("Sending chat invite notification for room %s to user %s", room.ID, memberID)
+
+						// Send notification through Redis
+						notificationData := map[string]interface{}{
+							"type":       "chat_invite",
+							"room_id":    room.ID,
+							"room_name":  room.Name,
+							"inviter_id": userID,
+						}
+
+						channel := fmt.Sprintf("user:notify:%s", memberID)
+						fmt.Println("Sending notification to channel:", channel)
+
+						if err := redisPubSub.PublishMessage(channel, notificationData); err != nil {
+							log.Printf("Failed to send notification: %v", err)
 						}
 					}
 				}
 
 				c.JSON(201, room)
+			})
+			protected.POST("/rooms/:roomId/invites/accept", func(c *gin.Context) {
+				userID := c.GetString("userID")
+				roomID := c.Param("roomId")
+
+				// Update member status to joined
+				if err := pgRoom.UpdateMemberStatus(roomID, userID, postgres.RoomMemberStatusJoined); err != nil {
+					c.JSON(500, gin.H{"error": "Failed to accept invite"})
+					return
+				}
+
+				c.JSON(200, gin.H{"message": "Invite accepted"})
+			})
+
+			protected.POST("/rooms/:roomId/invites/decline", func(c *gin.Context) {
+				userID := c.GetString("userID")
+				roomID := c.Param("roomId")
+
+				// Update member status to declined
+				if err := pgRoom.UpdateMemberStatus(roomID, userID, postgres.RoomMemberStatusDeclined); err != nil {
+					c.JSON(500, gin.H{"error": "Failed to decline invite"})
+					return
+				}
+
+				c.JSON(200, gin.H{"message": "Invite declined"})
 			})
 
 			protected.POST("/dm/:userId", func(c *gin.Context) {

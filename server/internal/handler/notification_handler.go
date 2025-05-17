@@ -4,7 +4,6 @@ package handler
 
 import (
 	"fmt"
-
 	"github.com/mjxoro/sent/server/internal/db/redis" // For PubSub
 	"github.com/mjxoro/sent/server/pkg/websocket"     // For Client
 )
@@ -37,12 +36,38 @@ type NotificationPayload struct {
 
 func (h *NotificationHandler) HandleUserNotifications(client *websocket.Client, userID string) {
 	channel := fmt.Sprintf("user:notify:%s", userID)
+	fmt.Printf("Subscribing to notification channel: %s\n", channel)
 
-	h.redisPubSub.Subscribe(channel, func(message []byte) {
-		if client != nil && client.Send != nil {
-			client.Send <- message
-		}
-	})
+	// Create a done channel to signal when to stop
+	done := make(chan struct{})
+
+	// Cleanup when the function returns
+	defer close(done)
+
+	// Start subscription in a separate goroutine
+	go func() {
+		h.redisPubSub.Subscribe(channel, func(message []byte) {
+			// Check if we should stop
+			select {
+			case <-done:
+				return
+			default:
+				// Try to send the message if client is still valid
+				if client != nil && client.Send != nil {
+					select {
+					case client.Send <- message:
+						fmt.Printf("Sent notification to user %s\n", userID)
+					default:
+						fmt.Printf("Failed to send notification: channel full or closed\n")
+						return
+					}
+				}
+			}
+		})
+	}()
+
+	// Wait for client to disconnect
+	<-client.Done()
 }
 
 // Add method to send notifications

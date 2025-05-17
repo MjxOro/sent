@@ -4,7 +4,7 @@ package redis
 import (
 	"context"
 	"encoding/json"
-	"log"
+	"fmt"
 )
 
 // PubSub handles Redis pub/sub messaging
@@ -29,6 +29,7 @@ func (ps *PubSub) PublishMessage(channel string, message interface{}) error {
 		return err
 	}
 
+	fmt.Printf("Publishing to channel: %s, message: %v", channel, message)
 	// Publish to Redis
 	return ps.client.Publish(ctx, channel, jsonData).Err()
 }
@@ -44,7 +45,7 @@ func (ps *PubSub) Subscribe(channel string, handler func([]byte)) {
 	// Listen for messages
 	ch := pubsub.Channel()
 
-	log.Printf("Subscribed to Redis channel: %s", channel)
+	fmt.Printf("Subscribed to Redis channel: %s", channel)
 
 	for msg := range ch {
 		handler([]byte(msg.Payload))
@@ -67,7 +68,7 @@ func (ps *PubSub) SubscribeToRooms(roomIDs []string, handler func(string, []byte
 	// Listen for messages
 	ch := pubsub.Channel()
 
-	log.Printf("Subscribed to %d Redis channels", len(channels))
+	fmt.Printf("Subscribed to %d Redis channels", len(channels))
 
 	for msg := range ch {
 		// Extract room ID from channel
