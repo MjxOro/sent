@@ -35,14 +35,26 @@ interface ServerMessage {
   success?: boolean;
   message?: string;
   message_ids?: string[];
+
+  // Update data to include chat invite fields
   data?: {
     title?: string;
     is_typing?: boolean;
     user_name?: string;
+    // New chat invite fields
+    roomId?: string;
+    roomName?: string;
+    inviterId?: string;
+    inviterName?: string;
   };
+
+  // For chat invites
+  inviter_id?: string;
+  inviter_name?: string;
+  room_name?: string;
+
   friendship_id?: string;
 }
-
 // Message types to send to server
 interface ClientMessage {
   type: string;
@@ -445,6 +457,7 @@ export const useSocketStore = create<SocketState>()((set, get) => ({
   _handleMessage: (event) => {
     try {
       const data = JSON.parse(event.data) as ServerMessage;
+      console.log("Parsed message:", data);
 
       const { addNotification } = useNotificationStore.getState();
 
@@ -601,6 +614,21 @@ export const useSocketStore = create<SocketState>()((set, get) => ({
             // Refresh friends list
             useFriendStore.getState().loadFriends();
           }
+          break;
+        case "chat_invite":
+          addNotification({
+            type: "chat_invite",
+            title: "Chat Invitation",
+            message: `${data.inviter_name} invited you to ${data.room_name}`,
+            sourceId: data.room_id,
+            data: {
+              roomId: data?.room_id,
+              roomName: data?.room_name,
+              inviterId: data?.inviter_id,
+              inviterName: data?.inviter_name,
+            },
+            status: "pending",
+          });
           break;
       }
     } catch (error) {
