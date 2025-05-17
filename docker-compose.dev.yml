@@ -28,7 +28,7 @@ services:
     ports:
       - "${PORT:-8080}:8080"
     volumes:
-      - ./server:/server
+      - ./server:/app
     env_file:
       - ./.env
     depends_on:
