@@ -38,21 +38,18 @@ func (h *NotificationHandler) HandleUserNotifications(client *websocket.Client, 
 	channel := fmt.Sprintf("user:notify:%s", userID)
 	fmt.Printf("Subscribing to notification channel: %s\n", channel)
 
-	// Create a done channel to signal when to stop
+	// Create a done channel for clean shutdown
 	done := make(chan struct{})
-
-	// Cleanup when the function returns
 	defer close(done)
 
-	// Start subscription in a separate goroutine
+	// Start subscription in a goroutine with cancellation
 	go func() {
 		h.redisPubSub.Subscribe(channel, func(message []byte) {
-			// Check if we should stop
 			select {
 			case <-done:
 				return
 			default:
-				// Try to send the message if client is still valid
+				// Only try to send if client is still connected
 				if client != nil && client.Send != nil {
 					select {
 					case client.Send <- message:
@@ -66,8 +63,8 @@ func (h *NotificationHandler) HandleUserNotifications(client *websocket.Client, 
 		})
 	}()
 
-	// Wait for client to disconnect
-	<-client.Done()
+	// Wait for client to disconnect - FIXED THIS LINE
+	<-client.Done // We just read from the channel instead of trying to call it
 }
 
 // Add method to send notifications

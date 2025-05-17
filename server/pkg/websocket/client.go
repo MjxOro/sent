@@ -48,7 +48,7 @@ func NewClient(hub *Hub, conn *websocket.Conn, id string) *Client {
 func (c *Client) ReadPump() {
 	defer func() {
 		c.Hub.Unregister <- c
-		c.Conn.Close()
+		c.Close() // Use the new Close method instead of just closing the connection
 	}()
 
 	c.Conn.SetReadLimit(maxMessageSize)
@@ -132,4 +132,29 @@ func (c *Client) JoinRoom(roomID string) {
 // LeaveRoom removes client from a room
 func (c *Client) LeaveRoom(roomID string) {
 	delete(c.Rooms, roomID)
+}
+
+func (c *Client) Close() {
+	// Only close Done channel once
+	select {
+	case <-c.Done:
+		// Already closed
+		return
+	default:
+		close(c.Done)
+	}
+
+	// Close connection and send channel
+	if c.Conn != nil {
+		c.Conn.Close()
+	}
+
+	// Only close Send channel if it hasn't been closed yet
+	select {
+	case <-c.Send:
+		// Channel already closed
+		return
+	default:
+		close(c.Send)
+	}
 }
