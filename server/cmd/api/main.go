@@ -44,6 +44,7 @@ func main() {
 
 	// Initialize Redis cache
 	redisCache := redis.NewCache(redisClient)
+	redisPubSub := redis.NewPubSub(redisClient)
 
 	// Initialize repositories
 	pgUser := postgres.NewUser(pgDB)
@@ -68,7 +69,7 @@ func main() {
 
 	// Initialize handlers
 	authHandler := handler.NewAuthHandler(oauthService, jwtService, userService, refreshTokenService)
-	wsHandler := handler.NewWSHandler(hub, chatService, userService, jwtService)
+	wsHandler := handler.NewWSHandler(hub, chatService, userService, jwtService, redisPubSub)
 	friendshipHandler := handler.NewFriendshipHandler(friendshipService)
 
 	// Set Gin mode

@@ -11,6 +11,7 @@ import (
 	"github.com/gin-gonic/gin"
 	gorillaWs "github.com/gorilla/websocket"
 	"github.com/mjxoro/sent/server/internal/auth"
+	"github.com/mjxoro/sent/server/internal/db/redis"
 	"github.com/mjxoro/sent/server/internal/models"
 	"github.com/mjxoro/sent/server/internal/service"
 	"github.com/mjxoro/sent/server/pkg/websocket"
@@ -18,10 +19,11 @@ import (
 
 // WSHandler handles WebSocket connections
 type WSHandler struct {
-	hub         *websocket.Hub
-	chatService *service.ChatService
-	userService *service.UserService
-	jwtService  *auth.JWTService
+	hub           *websocket.Hub
+	chatService   *service.ChatService
+	userService   *service.UserService
+	jwtService    *auth.JWTService
+	notifications *NotificationHandler
 }
 
 // NewWSHandler creates a new WebSocket handler
@@ -30,12 +32,14 @@ func NewWSHandler(
 	chatService *service.ChatService,
 	userService *service.UserService,
 	jwtService *auth.JWTService,
+	redisPubSub *redis.PubSub,
 ) *WSHandler {
 	return &WSHandler{
-		hub:         hub,
-		chatService: chatService,
-		userService: userService,
-		jwtService:  jwtService,
+		hub:           hub,
+		chatService:   chatService,
+		userService:   userService,
+		jwtService:    jwtService,
+		notifications: NewNotificationHandler(redisPubSub),
 	}
 }
 
@@ -108,6 +112,7 @@ func (h *WSHandler) HandleConnection(c *gin.Context) {
 	log.Printf("WebSocket connection established for user: %s (%s)", user.Name, userID)
 
 	// Start server-side goroutines
+	go h.notifications.HandleUserNotifications(client, userID)
 	go h.handleMessages(client, user)
 	go client.WritePump()
 }
