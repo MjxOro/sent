@@ -29,6 +29,7 @@ type Client struct {
 	Send  chan []byte
 	ID    string
 	Rooms map[string]bool // Changed from a single Room string to a map of rooms
+	Done  chan struct{}
 }
 
 // NewClient creates a new WebSocket client
@@ -39,6 +40,7 @@ func NewClient(hub *Hub, conn *websocket.Conn, id string) *Client {
 		Send:  make(chan []byte, 256),
 		ID:    id,
 		Rooms: make(map[string]bool),
+		Done:  make(chan struct{}),
 	}
 }
 
