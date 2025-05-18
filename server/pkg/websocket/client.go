@@ -89,7 +89,6 @@ func (c *Client) WritePump() {
 		case message, ok := <-c.Send:
 			c.Conn.SetWriteDeadline(time.Now().Add(writeWait))
 			if !ok {
-				// The hub closed the channel
 				c.Conn.WriteMessage(websocket.CloseMessage, []byte{})
 				return
 			}
@@ -98,17 +97,15 @@ func (c *Client) WritePump() {
 			if err != nil {
 				return
 			}
+
+			// Just write the message directly - no extra handling needed
 			w.Write(message)
 
-			// Add queued chat messages to the current WebSocket message
-			n := len(c.Send)
-			for i := 0; i < n; i++ {
-				w.Write(<-c.Send)
-			}
-
+			// Close the writer
 			if err := w.Close(); err != nil {
 				return
 			}
+
 		case <-ticker.C:
 			c.Conn.SetWriteDeadline(time.Now().Add(writeWait))
 			if err := c.Conn.WriteMessage(websocket.PingMessage, nil); err != nil {
