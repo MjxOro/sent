@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import { useNotificationStore } from "@/stores/notificationStore";
 import { Notification } from "@/stores/notificationStore";
 import { useThreadStore } from "@/stores/threadStore";
-import { useCallback } from "react";
 
 interface ChatInviteModalProps {
   onClose: () => void;
@@ -15,7 +14,7 @@ const ChatInviteModal = ({ onClose }: ChatInviteModalProps) => {
   const [isLoading, setIsLoading] = useState<string | null>(null); // Track which invite is loading
   const router = useRouter();
   // Just destructure getChatInvites like any other action
-  const { getChatInvites } = useNotificationStore();
+  const { getChatInvites, markAsRead } = useNotificationStore();
   const chatInvites = getChatInvites();
 
   const handleAccept = async (notification: Notification) => {
@@ -28,6 +27,7 @@ const ChatInviteModal = ({ onClose }: ChatInviteModalProps) => {
         },
       );
       if (!response.ok) throw new Error("Failed to accept invite");
+      markAsRead(notification.id);
       await useThreadStore.getState().loadThreads();
       router.push(`/chat/${notification.data?.roomId}`);
       onClose();
@@ -35,6 +35,25 @@ const ChatInviteModal = ({ onClose }: ChatInviteModalProps) => {
       console.error("Failed to accept invite:", error);
     } finally {
       setIsLoading(null);
+    }
+  };
+  const handleDecline = async (notification: Notification) => {
+    try {
+      const response = await fetch(
+        `/api/rooms/${notification.data?.roomId}/invites/decline`,
+        {
+          method: "POST",
+          credentials: "include",
+        },
+      );
+
+      if (!response.ok) {
+        throw new Error("Failed to decline invitation");
+      }
+      markAsRead(notification.id);
+      onClose();
+    } catch (error) {
+      console.error("Error declining invitation:", error);
     }
   };
   return (
@@ -59,7 +78,7 @@ const ChatInviteModal = ({ onClose }: ChatInviteModalProps) => {
                 </p>
                 <div className="flex justify-center gap-4 mt-4">
                   <button
-                    onClick={onClose}
+                    onClick={() => handleDecline(invite)}
                     className="px-4 py-2"
                     disabled={isLoading === invite.id}
                   >
