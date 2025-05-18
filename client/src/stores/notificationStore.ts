@@ -4,10 +4,20 @@ import { useFriendStore } from "./friendStore";
 import { useThreadStore } from "./threadStore";
 
 interface ChatInviteData {
+  // Chat invite fields
   roomId?: string;
   roomName?: string;
   inviterId?: string;
   inviterName?: string;
+
+  // Friend request/acceptance fields
+  userId?: string;
+  userName?: string;
+  userAvatar?: string;
+  friendshipId?: string;
+
+  // Message fields
+  inviterAvatar?: string;
 }
 
 export type NotificationType =

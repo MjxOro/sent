@@ -4,6 +4,7 @@ import { useMessageStore, Message } from "./messageStore";
 import { useThreadStore } from "./threadStore";
 import { useNotificationStore } from "./notificationStore";
 import { useFriendStore } from "./friendStore";
+import { useAuthStore, User } from "./authStore";
 
 // Types
 export type ConnectionStatus =
@@ -460,6 +461,7 @@ export const useSocketStore = create<SocketState>()((set, get) => ({
       console.log("Parsed message:", data);
 
       const { addNotification } = useNotificationStore.getState();
+      const currentUser = useAuthStore.getState().user;
 
       // Handle different message types
       switch (data.type) {
@@ -485,21 +487,24 @@ export const useSocketStore = create<SocketState>()((set, get) => ({
           // If message is not from current user and not in active thread,
           // create a notification
           const currentThreadId = useThreadStore.getState().currentThreadId;
-          const userId = localStorage.getItem("userId");
 
-          if (data.user_id !== userId && data.room_id !== currentThreadId) {
-            // Get username
-            const userName = data.user_name || "Someone";
-
-            // Create notification
+          if (
+            data.user_id !== currentUser?.id &&
+            data.room_id !== currentThreadId
+          ) {
             addNotification({
               type: "message",
-              title: `New message from ${userName}`,
+              title: `New message from ${data.user_name}`,
               message:
                 data.content.length > 50
                   ? `${data.content.substring(0, 47)}...`
                   : data.content,
               sourceId: data.room_id,
+              data: {
+                roomId: data.room_id,
+                inviterId: data.user_id,
+                inviterAvatar: data.user_avatar,
+              },
             });
           }
           break;
@@ -608,7 +613,12 @@ export const useSocketStore = create<SocketState>()((set, get) => ({
               type: "friend_accepted",
               title: "Friend Request Accepted",
               message: `${data.user_name} accepted your friend request`,
-              sourceId: data.user_id,
+              sourceId: data?.friendship_id,
+              data: {
+                userId: data.user_id,
+                userName: data.user_name,
+                userAvatar: data?.user_avatar,
+              },
             });
 
             // Refresh friends list
