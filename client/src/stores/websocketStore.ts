@@ -42,11 +42,15 @@ interface ServerMessage {
     title?: string;
     is_typing?: boolean;
     user_name?: string;
-    // New chat invite fields
     roomId?: string;
     roomName?: string;
     inviterId?: string;
     inviterName?: string;
+    // Add these new fields for Redis notifications
+    content?: string;
+    room_id?: string;
+    message_id?: string;
+    sender_avatar?: string;
   };
 
   // For chat invites
@@ -459,11 +463,28 @@ export const useSocketStore = create<SocketState>()((set, get) => ({
 
       const { addNotification } = useNotificationStore.getState();
       const currentUser = useAuthStore.getState().user;
+      const currentThreadId = useThreadStore.getState().currentThreadId;
 
       // Handle different message types
       switch (data.type) {
         case "message":
           // Validate all required fields exist
+          if (data.data && data.data.room_id && data.data.content) {
+            console.log("WORKED");
+            if (data.user_id !== currentUser?.id) {
+              addNotification({
+                type: "message",
+                title: `New message from ${data.user_name}`,
+                message: data.data.content,
+                sourceId: data.data.room_id,
+                data: {
+                  roomId: data.data.room_id,
+                  inviterId: data.user_id,
+                  inviterAvatar: data.data.sender_avatar,
+                },
+              });
+            }
+          }
           if (!data.id || !data.room_id || !data.content || !data.created_at) {
             console.error("Received message missing required fields:", data);
             return;
@@ -483,27 +504,6 @@ export const useSocketStore = create<SocketState>()((set, get) => ({
 
           // If message is not from current user and not in active thread,
           // create a notification
-          const currentThreadId = useThreadStore.getState().currentThreadId;
-
-          if (
-            data.user_id !== currentUser?.id &&
-            data.room_id !== currentThreadId
-          ) {
-            addNotification({
-              type: "message",
-              title: `New message from ${data.user_name}`,
-              message:
-                data.content.length > 50
-                  ? `${data.content.substring(0, 47)}...`
-                  : data.content,
-              sourceId: data.room_id,
-              data: {
-                roomId: data.room_id,
-                inviterId: data.user_id,
-                inviterAvatar: data.user_avatar,
-              },
-            });
-          }
           break;
 
         case "message_sent":
