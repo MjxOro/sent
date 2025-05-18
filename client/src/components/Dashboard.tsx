@@ -104,18 +104,21 @@ const Dashboard: React.FC<DashboardProps> = () => {
 
   // Scroll to bottom on new messages
   useEffect(() => {
-    // Only auto-scroll if we're near the bottom already
     if (messagesContainerRef.current) {
       const container = messagesContainerRef.current;
+      if (!hasLoadedMessages || currentThreadId) {
+        container.scrollTop = container.scrollHeight;
+        setHasLoadedMessages(true);
+        return;
+      }
       const isNearBottom =
         container.scrollHeight - container.scrollTop - container.clientHeight;
-
       if (isNearBottom || messages.length <= 1) {
         messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
       }
     }
     setHasLoadedMessages(true);
-  }, [messages]);
+  }, [messages, currentThreadId]);
 
   // Handle sending a message
   const handleSubmit = (e: React.FormEvent) => {
@@ -289,24 +292,31 @@ const Dashboard: React.FC<DashboardProps> = () => {
                   {group.threads.map((thread: Thread) => (
                     <li key={thread.id} className="mb-1">
                       <div
-                        className={`relative group flex items-center p-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer ${
+                        className={`relative group flex items-center justify-between p-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer ${
                           currentThreadId === thread.id
                             ? "bg-gray-100 dark:bg-gray-700"
                             : ""
                         }`}
                         onClick={() => handleThreadClick(thread.id)}
                       >
-                        <span className="truncate text-sm dark:text-gray-300">
-                          {thread.title}
-                          {thread.unreadCount ? (
-                            <span className="ml-2 bg-sent-primary text-white text-xs px-1.5 py-0.5 rounded-full">
-                              {thread.unreadCount}
-                            </span>
-                          ) : null}
-                        </span>
+                        {/* Title section */}
+                        <div className="flex items-center flex-1">
+                          <span className="truncate text-sm dark:text-gray-300">
+                            {thread.title}
+                          </span>
+                          <NotificationWrapper
+                            type="message"
+                            threadId={thread.id}
+                            position="top-right"
+                            size="sm"
+                            showCount={true}
+                          >
+                            <div className="ml-2 w-5 h-5" />
+                          </NotificationWrapper>
+                        </div>
 
                         {/* Thread Actions - Show on hover */}
-                        <div className="absolute right-0 flex space-x-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <div className="flex space-x-1 opacity-0 group-hover:opacity-100 transition-opacity">
                           <button
                             className="p-1 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
                             onClick={(e) => {
