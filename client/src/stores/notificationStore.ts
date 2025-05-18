@@ -48,7 +48,7 @@ interface NotificationState {
     notification: Omit<Notification, "id" | "isRead" | "timestamp">,
   ) => void;
   markAsRead: (notificationId: string) => void;
-  markAllAsRead: () => void;
+  markAllAsRead: (notificationIds: string[]) => void;
   clearNotifications: () => void;
   loadNotifications: () => Promise<void>;
   handleChatInvite: (notification: Notification) => Promise<string>;
@@ -178,16 +178,21 @@ export const useNotificationStore = create<NotificationState>()((set, get) => ({
       (n) => n.type === "chat_invite" && !n.isRead,
     );
   },
-  markAllAsRead: () => {
+  markAllAsRead: (notificationIds: string[]) => {
     set((state) => ({
       notifications: state.notifications.map((notification) => ({
         ...notification,
-        isRead: true,
+        // Only mark as read if notification ID is in the provided array
+        isRead: notificationIds.includes(notification.id)
+          ? true
+          : notification.isRead,
       })),
-      unreadCount: 0,
+      // Update unread count to exclude the newly read notifications
+      unreadCount: state.notifications.filter(
+        (n) => !n.isRead && !notificationIds.includes(n.id),
+      ).length,
     }));
   },
-
   clearNotifications: () => {
     set({
       notifications: [],
