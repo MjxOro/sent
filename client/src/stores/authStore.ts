@@ -117,7 +117,7 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
       const data = (await response.json()) as AuthResponse;
 
       if (!response.ok || !data.authenticated) {
-        console.log(
+        console.error(
           "Authentication check failed:",
           data.message || "Unknown error",
         );
