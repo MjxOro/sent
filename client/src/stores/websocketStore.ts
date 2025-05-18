@@ -187,11 +187,11 @@ export const useSocketStore = create<SocketState>()((set, get) => ({
 
         // Auto-reconnect unless this was a normal closure
         if (event.code !== 1000) {
-          console.log(
+          console.error(
             "Abnormal close, attempting to reconnect in 5 seconds...",
           );
           setTimeout(() => {
-            console.log("Reconnecting to WebSocket...");
+            console.error("Reconnecting to WebSocket...");
             get().connect();
           }, 5000);
         }
@@ -211,7 +211,7 @@ export const useSocketStore = create<SocketState>()((set, get) => ({
 
       // Attempt to reconnect after 5 seconds
       setTimeout(() => {
-        console.log("Attempting to reconnect after error...");
+        console.error("Attempting to reconnect after error...");
         get().connect();
       }, 5000);
     }
@@ -329,8 +329,6 @@ export const useSocketStore = create<SocketState>()((set, get) => ({
     // If WebSocket is connected, send through it
     if (instance && status === "connected") {
       try {
-        console.log("Sending message via WebSocket...");
-
         let messageString;
         try {
           messageString = JSON.stringify(message);
@@ -458,7 +456,6 @@ export const useSocketStore = create<SocketState>()((set, get) => ({
   _handleMessage: (event) => {
     try {
       const data = JSON.parse(event.data) as ServerMessage;
-      console.log("Parsed message:", data);
 
       const { addNotification } = useNotificationStore.getState();
       const currentUser = useAuthStore.getState().user;
