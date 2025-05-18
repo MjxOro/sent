@@ -13,15 +13,19 @@ import (
 type ChatService struct {
 	pgRoom      *postgres.Room
 	pgMessage   *postgres.Message
+	userService *UserService
 	redisClient *redis.Client
+	redisPubSub *redis.PubSub
 }
 
 // NewChatService creates a new chat service
-func NewChatService(pgRoom *postgres.Room, pgMessage *postgres.Message, redisClient *redis.Client) *ChatService {
+func NewChatService(pgRoom *postgres.Room, pgMessage *postgres.Message, userService *UserService, redisClient *redis.Client, redisPubsub *redis.PubSub) *ChatService {
 	return &ChatService{
 		pgRoom:      pgRoom,
 		pgMessage:   pgMessage,
+		userService: userService,
 		redisClient: redisClient,
+		redisPubSub: redisPubsub,
 	}
 }
 
@@ -103,21 +107,52 @@ func (s *ChatService) SendMessage(roomID, userID, content string) (*models.Messa
 	}
 
 	// Publish message to Redis for real-time delivery
-	ctx := s.redisClient.Context()
+	sender, err := s.userService.GetByID(userID) // You'll need to add userService to ChatService
+	if err != nil {
+		fmt.Printf("Failed to get sender info: %v", err)
+		// Don't return error, message was still sent
+	}
+	members, err := s.pgRoom.GetRoomMembers(roomID)
+	if err != nil {
+		fmt.Printf("Failed to get room members: %v", err)
+		// Don't return error, message was still sent
+	}
+	for _, member := range members {
+		if member.ID != userID { // Don't notify sender
+			notification := NotificationPayload{
+				Type:     "message",
+				UserID:   userID,
+				UserName: sender.Name,
+				Data: map[string]interface{}{
+					"room_id":       roomID,
+					"message_id":    message.ID,
+					"content":       content,
+					"sender_avatar": sender.Avatar,
+				},
+			}
 
-	messageData, err := json.Marshal(map[string]any{
-		"id":        message.ID,
-		"room_id":   message.RoomID,
-		"user_id":   message.UserID,
-		"content":   message.Content,
-		"timestamp": message.CreatedAt,
+			channel := fmt.Sprintf("user:notify:%s", member.ID)
+			if err := s.redisPubSub.PublishMessage(channel, notification); err != nil {
+				fmt.Printf("Failed to send message notification to user %s: %v", member.ID, err)
+			}
+		}
+	}
+	messageData, err := json.Marshal(map[string]interface{}{
+		"id":          message.ID,
+		"room_id":     message.RoomID,
+		"user_id":     message.UserID,
+		"user_name":   sender.Name,
+		"content":     message.Content,
+		"created_at":  message.CreatedAt,
+		"user_avatar": sender.Avatar,
 	})
 	if err != nil {
-		return nil, err
+		fmt.Printf("Failed to marshal message data: %v", err)
+		// Don't return error, message was still sent
 	}
-
-	// Publish to Redis channel for this room
-	s.redisClient.Publish(ctx, "chat:room:"+roomID, messageData)
+	if err := s.redisPubSub.PublishMessage("chat:room:"+roomID, messageData); err != nil {
+		fmt.Printf("Failed to publish message to room channel: %v", err)
+	}
 
 	return message, nil
 }

@@ -55,9 +55,9 @@ func main() {
 
 	// Initialize services
 	userService := service.NewUserService(pgUser)
-	chatService := service.NewChatService(pgRoom, pgMessage, redisClient)
+	chatService := service.NewChatService(pgRoom, pgMessage, userService, redisClient, redisPubSub)
 	refreshTokenService := service.NewRefreshTokenService(pgRefreshToken)
-	friendshipService := service.NewFriendshipService(pgFriendship, pgUser, redisCache)
+	friendshipService := service.NewFriendshipService(pgFriendship, pgUser, redisCache, redisPubSub)
 
 	// Initialize auth services
 	oauthService := auth.NewOAuthService(cfg)

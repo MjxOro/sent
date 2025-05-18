@@ -12,6 +12,23 @@ type PubSub struct {
 	client *Client
 }
 
+type NotificationPayload struct {
+	Type      string      `json:"type"`
+	UserID    string      `json:"user_id,omitempty"`
+	UserName  string      `json:"user_name,omitempty"`
+	RoomID    string      `json:"room_id,omitempty"`
+	MessageID string      `json:"message_id,omitempty"`
+	Data      interface{} `json:"data,omitempty"`
+}
+
+const (
+	NotificationTypeFriendRequest  = "friend_request"
+	NotificationTypeFriendAccepted = "friend_accepted"
+	NotificationTypeFriendDeclined = "friend_declined"
+	NotificationTypeMessageSeen    = "message_seen"
+	NotificationTypeChatInvite     = "chat_invite"
+)
+
 // NewPubSub creates a new PubSub instance
 func NewPubSub(client *Client) *PubSub {
 	return &PubSub{

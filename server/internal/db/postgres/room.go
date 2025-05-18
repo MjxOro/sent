@@ -135,18 +135,20 @@ func (r *Room) AddMember(roomID, userID, role string, isCreator bool) error {
 
 // UpdateMemberStatus updates a member's status in a room
 func (r *Room) UpdateMemberStatus(roomID, userID string, status RoomMemberStatus) error {
+	statusStr := string(status)
+
 	query := `
         UPDATE room_members 
-        SET status = $1,
+        SET status = $1::varchar,
             joined_at = CASE 
-                WHEN $1 = 'joined' THEN NOW() 
+                WHEN $1::varchar = 'joined' THEN NOW() 
                 ELSE joined_at 
             END,
             updated_at = NOW()
         WHERE room_id = $2 AND user_id = $3
     `
 
-	_, err := r.db.Exec(query, status, roomID, userID)
+	_, err := r.db.Exec(query, statusStr, roomID, userID)
 	return err
 }
 

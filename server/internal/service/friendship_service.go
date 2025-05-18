@@ -3,7 +3,7 @@ package service
 
 import (
 	"errors"
-
+	"fmt"
 	"github.com/mjxoro/sent/server/internal/db/postgres"
 	"github.com/mjxoro/sent/server/internal/db/redis"
 	"github.com/mjxoro/sent/server/internal/models"
@@ -14,21 +14,30 @@ type FriendshipService struct {
 	pgFriendship *postgres.Friendship
 	pgUser       *postgres.User
 	redisCache   *redis.Cache
+	redisPubSub  *redis.PubSub
 }
 
 // NewFriendshipService creates a new friendship service
-func NewFriendshipService(pgFriendship *postgres.Friendship, pgUser *postgres.User, redisCache *redis.Cache) *FriendshipService {
+func NewFriendshipService(pgFriendship *postgres.Friendship, pgUser *postgres.User, redisCache *redis.Cache, redisPubSub *redis.PubSub) *FriendshipService {
 	return &FriendshipService{
 		pgFriendship: pgFriendship,
 		pgUser:       pgUser,
 		redisCache:   redisCache,
+		redisPubSub:  redisPubSub,
 	}
+}
+
+type NotificationPayload struct {
+	Type     string      `json:"type"`
+	UserID   string      `json:"user_id,omitempty"`
+	UserName string      `json:"user_name,omitempty"`
+	Data     interface{} `json:"data,omitempty"`
 }
 
 // SendFriendRequest sends a friend request from one user to another
 func (s *FriendshipService) SendFriendRequest(userID, friendID string) (*models.Friendship, error) {
 	// Validate users exist
-	_, err := s.pgUser.FindByID(userID)
+	sender, err := s.pgUser.FindByID(userID)
 	if err != nil {
 		return nil, errors.New("sender user not found")
 	}
@@ -53,6 +62,21 @@ func (s *FriendshipService) SendFriendRequest(userID, friendID string) (*models.
 			if err != nil {
 				return nil, err
 			}
+			// Send notification for the re-request
+			notification := NotificationPayload{
+				Type:     "friend_request",
+				UserID:   userID,
+				UserName: sender.Name,
+				Data: map[string]interface{}{
+					"friendship_id": existingFriendship.ID,
+					"sender_avatar": sender.Avatar,
+				},
+			}
+
+			channel := fmt.Sprintf("user:notify:%s", friendID)
+			if err := s.redisPubSub.PublishMessage(channel, notification); err != nil {
+				fmt.Printf("Failed to send friend request notification: %v", err)
+			}
 			return existingFriendship, nil
 		case models.FriendshipStatusBlocked:
 			return nil, errors.New("cannot send friend request")
@@ -71,7 +95,20 @@ func (s *FriendshipService) SendFriendRequest(userID, friendID string) (*models.
 		return nil, err
 	}
 
-	// TODO: Send notification to friendID
+	notification := NotificationPayload{
+		Type:     "friend_request",
+		UserID:   userID,
+		UserName: sender.Name,
+		Data: map[string]interface{}{
+			"friendship_id": friendship.ID,
+			"sender_avatar": sender.Avatar,
+		},
+	}
+
+	channel := fmt.Sprintf("user:notify:%s", friendID)
+	if err := s.redisPubSub.PublishMessage(channel, notification); err != nil {
+		fmt.Printf("Failed to send friend request notification: %v", err)
+	}
 
 	return friendship, nil
 }
